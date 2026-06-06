@@ -1,0 +1,938 @@
+:root {
+  color-scheme: light;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #eef3ec;
+  color: #19241f;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --surface: #ffffff;
+  --surface-soft: #f7faf4;
+  --ink: #19241f;
+  --muted: #617068;
+  --line: #dbe4d8;
+  --green: #1f7a5a;
+  --green-dark: #155f47;
+  --blue: #2f65d7;
+  --orange: #e76f51;
+  --amber: #f0a84c;
+  --red: #bf3f4a;
+  --shadow: 0 18px 48px rgba(33, 52, 42, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(242, 248, 239, 0.95), rgba(231, 238, 230, 0.95)),
+    radial-gradient(circle at 15% 20%, rgba(47, 101, 215, 0.08), transparent 28%),
+    radial-gradient(circle at 90% 8%, rgba(231, 111, 81, 0.1), transparent 24%);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid rgba(47, 101, 215, 0.28);
+  outline-offset: 2px;
+}
+
+.appShell {
+  width: min(1500px, 100%);
+  margin: 0 auto;
+  padding: 22px;
+}
+
+.topNav {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 48px;
+  padding: 5px;
+  margin-bottom: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(33, 52, 42, 0.08);
+}
+
+.topNav button {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  min-width: 112px;
+  height: 38px;
+  padding: 0 14px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+}
+
+.topNav button.active {
+  color: #ffffff;
+  background: var(--green);
+}
+
+.plannerLayout {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr) minmax(300px, 390px);
+  gap: 16px;
+  align-items: start;
+}
+
+.plannerPanel,
+.mapPanel,
+.detailsPanel,
+.savedPanel {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.plannerPanel {
+  position: sticky;
+  top: 18px;
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+}
+
+.brandBlock,
+.detailsHeader,
+.savedHeader,
+.mapToolbar,
+.savedCardTop,
+.routeCardButton {
+  display: flex;
+  align-items: center;
+}
+
+.brandBlock {
+  gap: 12px;
+}
+
+.logoMark {
+  display: inline-grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  color: #ffffff;
+  background: var(--green);
+  border-radius: 8px;
+}
+
+.eyebrow {
+  display: block;
+  margin: 0 0 4px;
+  color: var(--green-dark);
+  font-size: 0.77rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 1.72rem;
+  line-height: 1.08;
+}
+
+h2 {
+  font-size: 1.16rem;
+  line-height: 1.2;
+}
+
+h3 {
+  font-size: 0.94rem;
+  line-height: 1.2;
+}
+
+.fieldGroup {
+  display: grid;
+  gap: 8px;
+}
+
+label {
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+input,
+select {
+  width: 100%;
+  min-height: 42px;
+  color: var(--ink);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+input {
+  padding: 0 12px;
+}
+
+select {
+  padding: 0 34px 0 12px;
+}
+
+.inputWithButton {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 8px;
+}
+
+.iconButton {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  color: var(--green);
+  background: #eaf4ec;
+  border: 1px solid #b8d2be;
+  border-radius: 7px;
+}
+
+.fieldNote {
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.twoColumn {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.numberInput {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding-right: 10px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.numberInput input {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+}
+
+.numberInput span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.segmentedControl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  padding: 5px;
+  background: #edf3ea;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.segmentedControl button {
+  min-height: 36px;
+  padding: 0 6px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.segmentedControl button.active {
+  color: #ffffff;
+  background: var(--blue);
+}
+
+.styleGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.styleOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 10px;
+  color: var(--muted);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-align: left;
+}
+
+.styleOption span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.styleOption.active {
+  color: var(--green-dark);
+  border-color: #9fceb0;
+  background: #e8f5e9;
+}
+
+.primaryButton,
+.secondaryButton,
+.textButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 7px;
+  font-weight: 850;
+}
+
+.primaryButton {
+  width: 100%;
+  color: #ffffff;
+  background: var(--green);
+  border: 1px solid var(--green-dark);
+}
+
+.primaryButton:hover {
+  background: var(--green-dark);
+}
+
+.primaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.secondaryButton {
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid var(--line);
+}
+
+.secondaryButton:hover {
+  border-color: #a9b9a7;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+.textButton {
+  color: var(--red);
+  background: transparent;
+  border: 0;
+}
+
+.resultsColumn {
+  display: grid;
+  gap: 12px;
+}
+
+.mapPanel {
+  overflow: hidden;
+}
+
+.mapToolbar {
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 78px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.mapLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.legendButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 10px;
+  color: var(--muted);
+  background: #f8faf7;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.legendButton.active {
+  color: var(--ink);
+  border-color: #99bca4;
+  background: #eef8ef;
+}
+
+.legendButton span,
+.routeColor {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+}
+
+.mapCanvas {
+  position: relative;
+  min-height: 520px;
+  background: #dfe9dc;
+}
+
+.leafletMap {
+  width: 100%;
+  height: 520px;
+  min-height: 520px;
+}
+
+.leaflet-container {
+  z-index: 1;
+  font: inherit;
+}
+
+.leaflet-control-zoom a {
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.leaflet-popup-content {
+  margin: 10px 12px;
+  color: var(--ink);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.leaflet-tooltip {
+  border: 1px solid rgba(25, 36, 31, 0.18);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(25, 36, 31, 0.16);
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.mapHint {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 410;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 10px;
+  color: #163128;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(25, 36, 31, 0.14);
+  border-radius: 7px;
+  box-shadow: 0 10px 28px rgba(25, 36, 31, 0.14);
+  font-size: 0.8rem;
+  font-weight: 850;
+  pointer-events: none;
+}
+
+.mapHint.loading {
+  color: #173452;
+  border-color: rgba(47, 101, 215, 0.28);
+}
+
+.stopMarker {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  color: #ffffff;
+  background: var(--blue);
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 6px 16px rgba(25, 36, 31, 0.28);
+  font-size: 0.74rem;
+  font-weight: 950;
+}
+
+.stopMarker.water {
+  background: #2f65d7;
+}
+
+.stopMarker.cafe {
+  background: #8d4f2f;
+}
+
+.stopMarker.bathroom {
+  background: #1f7a5a;
+}
+
+.stopMarker.transit {
+  background: #5f4ec7;
+}
+
+.stopMarker.store {
+  background: #e76f51;
+}
+
+.rangeNotice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  color: var(--green-dark);
+  background: #edf7ed;
+  border: 1px solid #b9d6bc;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.routeList {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.routeCard {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(33, 52, 42, 0.08);
+}
+
+.routeCard.selected {
+  border-color: #8fc39e;
+  box-shadow: 0 14px 36px rgba(31, 122, 90, 0.16);
+}
+
+.routeCardButton {
+  width: 100%;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 54px;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+}
+
+.routeCardButton span:nth-child(2) {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.routeCardButton strong,
+.savedCardTop strong {
+  display: block;
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.routeCardButton small,
+.savedCardTop small {
+  display: block;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.routeMetrics {
+  display: grid;
+  gap: 8px;
+}
+
+.stat {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.stat strong {
+  color: var(--ink);
+  font-size: 0.86rem;
+  text-align: right;
+}
+
+.meter {
+  display: grid;
+  gap: 6px;
+}
+
+.meterHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.meterHeader strong {
+  color: var(--ink);
+}
+
+.meterTrack {
+  height: 8px;
+  overflow: hidden;
+  background: #e3eadd;
+  border-radius: 999px;
+}
+
+.meterFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.meterFill.green {
+  background: var(--green);
+}
+
+.meterFill.orange {
+  background: var(--orange);
+}
+
+.detailsPanel {
+  position: sticky;
+  top: 18px;
+  display: grid;
+  gap: 18px;
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  padding: 18px;
+}
+
+.detailsHeader,
+.savedHeader {
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.routeBadge {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 6px 10px;
+  color: var(--ink);
+  background: #ffffff;
+  border: 2px solid;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.detailsStats {
+  display: grid;
+  gap: 6px;
+}
+
+.weatherStrip {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px;
+  color: #1d3b46;
+  background: #e7f5f7;
+  border: 1px solid #b8dfe7;
+  border-radius: 8px;
+}
+
+.weatherStrip div {
+  display: grid;
+  gap: 4px;
+}
+
+.weatherStrip strong {
+  font-size: 0.9rem;
+}
+
+.weatherStrip span,
+.compactCopy,
+.savedCard p,
+.emptyState span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.detailSection {
+  display: grid;
+  gap: 10px;
+}
+
+.elevationChart {
+  height: 122px;
+  padding: 8px;
+  background: #f6f9f3;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.elevationChart svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.stopList,
+.runPlan {
+  display: grid;
+  gap: 8px;
+}
+
+.stopItem,
+.runPlan div {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.runPlan div {
+  grid-template-columns: 22px minmax(0, 1fr);
+}
+
+.stopItem strong {
+  color: var(--ink);
+}
+
+.directionsList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.directionsList li::marker {
+  color: var(--green);
+  font-weight: 850;
+}
+
+.actionRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.savedPanel {
+  padding: 20px;
+}
+
+.savedHeader {
+  margin-bottom: 18px;
+}
+
+.savedHeader select {
+  max-width: 180px;
+}
+
+.savedGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.savedCard {
+  display: grid;
+  gap: 12px;
+  min-height: 190px;
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.savedCardTop {
+  gap: 10px;
+  min-width: 0;
+}
+
+.savedCardTop div {
+  min-width: 0;
+}
+
+.savedActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: auto;
+}
+
+.emptyState {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 300px;
+  color: var(--muted);
+  text-align: center;
+  border: 1px dashed #b9c8b7;
+  border-radius: 8px;
+}
+
+.toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 20;
+  max-width: min(360px, calc(100vw - 48px));
+  padding: 12px 14px;
+  color: #ffffff;
+  background: #1d2922;
+  border-radius: 8px;
+  box-shadow: 0 18px 44px rgba(25, 36, 31, 0.22);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 1380px) {
+  .plannerLayout {
+    grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  }
+
+  .detailsPanel {
+    position: static;
+    grid-column: 1 / -1;
+    max-height: none;
+  }
+
+  .detailsStats,
+  .stopList,
+  .runPlan {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 880px) {
+  .appShell {
+    padding: 14px;
+  }
+
+  .topNav {
+    width: 100%;
+  }
+
+  .topNav button {
+    flex: 1;
+  }
+
+  .plannerLayout,
+  .routeList,
+  .savedGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .plannerPanel,
+  .detailsPanel {
+    position: static;
+  }
+
+  .mapToolbar,
+  .savedHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .mapLegend {
+    justify-content: flex-start;
+  }
+
+  .detailsStats,
+  .stopList,
+  .runPlan {
+    grid-template-columns: 1fr;
+  }
+
+  .mapCanvas,
+  .leafletMap {
+    height: 360px;
+    min-height: 360px;
+  }
+}
+
+@media (max-width: 520px) {
+  .plannerPanel,
+  .detailsPanel,
+  .savedPanel {
+    padding: 14px;
+  }
+
+  .twoColumn,
+  .styleGrid,
+  .actionRow {
+    grid-template-columns: 1fr;
+  }
+
+  .segmentedControl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .brandBlock {
+    align-items: flex-start;
+  }
+}
