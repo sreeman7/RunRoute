@@ -7,29 +7,38 @@ import {
   AlertTriangle,
   ArrowDownToLine,
   Bike,
+  Bot,
+  Brain,
   CalendarClock,
   Check,
   ChevronRight,
   CloudSun,
   Coffee,
   Compass,
+  Database,
   Droplets,
+  Flame,
   Footprints,
   LocateFixed,
   MapPin,
+  MessageCircle,
   Moon,
   Mountain,
   Navigation,
   RefreshCcw,
   Route,
   Save,
+  Send,
   Share2,
   ShieldCheck,
   Sparkles,
+  Sun,
   Timer,
   Toilet,
   Train,
   Trees,
+  Trophy,
+  WandSparkles,
   Waves
 } from 'lucide-react';
 import './styles.css';
@@ -50,6 +59,16 @@ const ROUTE_TYPES = [
   { id: 'one-way', label: 'One-way' },
   { id: 'out-and-back', label: 'Out-back' },
   { id: 'scenic', label: 'Scenic' }
+];
+
+const AGENT_MODES = [
+  { id: 'marathon', label: 'Marathon', trainingGoal: 'Marathon prep', style: 'flat', routeType: 'loop' },
+  { id: 'recovery', label: 'Recovery', trainingGoal: 'Recovery run', style: 'beginner', routeType: 'loop' },
+  { id: 'safe-night', label: 'Safe night', trainingGoal: 'Easy long run', style: 'night', routeType: 'loop' },
+  { id: 'scenic', label: 'Scenic', trainingGoal: 'Trail endurance', style: 'parks', routeType: 'scenic' },
+  { id: 'speedwork', label: 'Speedwork', trainingGoal: 'Tempo route', style: 'road', routeType: 'loop' },
+  { id: 'adventure', label: 'Adventure', trainingGoal: 'Trail endurance', style: 'scenic', routeType: 'one-way' },
+  { id: 'tourist', label: 'Tourist', trainingGoal: 'Easy long run', style: 'scenic', routeType: 'loop' }
 ];
 
 const STYLE_OPTIONS = [
@@ -93,7 +112,7 @@ function clamp(value, min, max) {
 }
 
 function round(value, places = 1) {
-  return Number(value.toFixed(places));
+  return Number((value + Number.EPSILON).toFixed(places));
 }
 
 function distancePrecision(distanceKm) {
@@ -246,6 +265,10 @@ function calculateNutrition(distanceKm) {
   return 'Water plus 3-4 gels';
 }
 
+function modeLabel(modeId) {
+  return AGENT_MODES.find((mode) => mode.id === modeId)?.label || 'Marathon';
+}
+
 function trainingRecommendation(goal, style, distanceKm) {
   if (goal === 'Marathon prep') return 'Mostly steady roads, low traffic, refill points every 6-8 km';
   if (goal === 'Hill training') return 'Rolling climbs with recovery sections after each sustained effort';
@@ -263,6 +286,9 @@ function createRoute(form, index, desiredDistanceKm, coordinates, source = 'esti
   const name = routeNames[index];
   const actualDistance = sourceDistanceKm || routeDistanceKm(coordinates) || desiredDistanceKm;
   const distance = round(actualDistance, distancePrecision(actualDistance));
+  const distanceGap = Math.abs(distance - target);
+  const distanceTolerance = Math.max(target * 0.025, 0.03);
+  const distanceStatus = distanceGap <= distanceTolerance ? 'Within target range' : 'Closest road match';
   const style = form.style;
   const routeType = form.routeType;
   const elevationBase = style === 'hills' ? 16 : style === 'flat' || style === 'beginner' ? 5 : 9;
@@ -276,6 +302,24 @@ function createRoute(form, index, desiredDistanceKm, coordinates, source = 'esti
     22,
     96
   );
+  const scenicScore = clamp(
+    66 + (style === 'parks' || style === 'scenic' ? 20 : 0) + (routeType === 'scenic' ? 10 : 0) - index * 3,
+    45,
+    98
+  );
+  const hydrationScore = clamp(54 + stops.length * 9 + (distance > 24 ? 6 : 0), 38, 96);
+  const interruptionScore = clamp(92 - index * 9 - (routeType === 'one-way' ? 3 : 0), 50, 95);
+  const modeFit = clamp(
+    Math.round(
+      safetyScore * 0.34 +
+        (100 - difficultyScore) * (form.agentMode === 'recovery' ? 0.3 : 0.18) +
+        scenicScore * (form.agentMode === 'scenic' || form.agentMode === 'tourist' ? 0.28 : 0.12) +
+        hydrationScore * (distance >= 16 ? 0.2 : 0.1) +
+        interruptionScore * (form.agentMode === 'speedwork' ? 0.25 : 0.12)
+    ),
+    40,
+    98
+  );
   const finish = coordinates[coordinates.length - 1];
 
   return {
@@ -284,11 +328,17 @@ function createRoute(form, index, desiredDistanceKm, coordinates, source = 'esti
     label: index === 0 ? 'Safest' : index === 1 ? 'Most scenic' : 'Flattest',
     description: trainingRecommendation(form.trainingGoal, style, distance),
     distanceKm: distance,
+    distanceGap: round(distanceGap, distancePrecision(distanceGap || target)),
+    distanceStatus,
     targetRange: routeRangeLabel(target),
     estimatedTime: formatDuration(distance, Number(form.paceMinPerKm)),
     pace: formatPace(Number(form.paceMinPerKm)),
     safetyScore: Math.round(safetyScore),
     difficultyScore,
+    hydrationScore: Math.round(hydrationScore),
+    interruptionScore: Math.round(interruptionScore),
+    modeFit,
+    scenicScore: Math.round(scenicScore),
     elevationGain,
     hardestClimb: `${round(distance * 0.48, distancePrecision(distance))}-${round(distance * 0.57, distancePrecision(distance))} km`,
     stops,
@@ -315,11 +365,18 @@ function generateEstimatedRoutes(form) {
 
 function routeScaleCandidates(form, desiredDistance) {
   if (form.routeType === 'one-way') return [0.7, 0.85, 1, 1.2, 1.45, 1.7];
-  if (desiredDistance < 3) return [0.35, 0.45, 0.55, 0.65, 0.78, 0.92, 1.08, 1.28, 1.52, 1.82, 2.2];
+  if (form.routeType === 'out-and-back') return [0.55, 0.7, 0.85, 1, 1.15, 1.3, 1.55];
+  if (desiredDistance < 3) return [0.08, 0.12, 0.16, 0.2, 0.25, 0.3, 0.35, 0.42, 0.5, 0.62, 0.78, 0.95, 1.15, 1.4];
   return [0.25, 0.32, 0.35, 0.42, 0.5, 0.62, 0.78, 0.95];
 }
 
-function routeShapeCandidates(index) {
+function routeShapeCandidates(index, desiredDistance, routeType) {
+  if (routeType === 'out-and-back') {
+    return [index, index + 13, index + 14, index + 15, index + 16, index + 1, index + 2];
+  }
+  if (desiredDistance < 3) {
+    return [index, index + 13, index + 4, index + 5, index + 16, index + 17, index + 1, index + 2, index + 6, index + 12];
+  }
   return [index, index + 16, index + 17, index + 1, index + 2, index + 6, index + 12];
 }
 
@@ -354,7 +411,7 @@ async function snapRouteToRoads(form, index) {
   let bestGap = Number.POSITIVE_INFINITY;
   const scaleCandidates = routeScaleCandidates(form, desiredDistance);
 
-  for (const shapeIndex of routeShapeCandidates(index)) {
+  for (const shapeIndex of routeShapeCandidates(index, desiredDistance, form.routeType)) {
     let foundCloseMatch = false;
     for (const scale of scaleCandidates) {
       const waypointCoordinates = buildCoordinates(
@@ -387,7 +444,7 @@ async function snapRouteToRoads(form, index) {
 
 async function generateRoadSnappedRoutes(form) {
   const snappedRoutes = await Promise.all([0, 1, 2].map((index) => snapRouteToRoads(form, index)));
-  return snappedRoutes.sort((first, second) => second.safetyScore - first.safetyScore);
+  return snappedRoutes;
 }
 
 function interpolateRoutePoint(route, distanceKm) {
@@ -410,7 +467,7 @@ function createGpx(route) {
     .map((point) => `      <trkpt lat="${point.lat}" lon="${point.lng}"></trkpt>`)
     .join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="LongRun Route Planner">
+<gpx version="1.1" creator="RunRoute AI">
   <trk>
     <name>${route.name}</name>
     <trkseg>
@@ -469,6 +526,180 @@ function normalizeRouteForm(form) {
     ...form,
     distanceKm: clamp(Number(form.distanceKm) || 20, MIN_DISTANCE_KM, MAX_DISTANCE_KM),
     paceMinPerKm: clamp(Number(form.paceMinPerKm) || 7, 3, 12)
+  };
+}
+
+function buildRunnerMemory(savedRoutes) {
+  if (savedRoutes.length === 0) {
+    return {
+      averageDistance: 0,
+      favoriteStyle: 'parks',
+      lastRoute: null,
+      savedCount: 0,
+      totalDistance: 0
+    };
+  }
+
+  const totalDistance = savedRoutes.reduce((sum, route) => sum + Number(route.distanceKm || 0), 0);
+  const styleCounts = savedRoutes.reduce((counts, route) => {
+    counts[route.style] = (counts[route.style] || 0) + 1;
+    return counts;
+  }, {});
+  const favoriteStyle = Object.entries(styleCounts).sort((first, second) => second[1] - first[1])[0]?.[0] || 'parks';
+
+  return {
+    averageDistance: round(totalDistance / savedRoutes.length, 1),
+    favoriteStyle,
+    lastRoute: savedRoutes[0],
+    savedCount: savedRoutes.length,
+    totalDistance: round(totalDistance, 1)
+  };
+}
+
+function routeBestUse(route, form) {
+  if (form.agentMode === 'recovery' || route.difficultyScore < 32) return 'Recovery run';
+  if (form.agentMode === 'speedwork' || route.interruptionScore > 84) return 'Tempo work';
+  if (form.agentMode === 'safe-night' || route.safetyScore >= 92) return 'Safe night run';
+  if (route.scenicScore >= 88) return 'Scenic exploration';
+  if (route.distanceKm >= 18) return 'Marathon endurance';
+  return 'Easy long run';
+}
+
+function analyzeRoutes(routes, selectedRoute, form, memory) {
+  const scoredRoutes = [...routes].sort((first, second) => second.modeFit - first.modeFit);
+  const bestRoute = scoredRoutes[0] || selectedRoute;
+  const savedMemory = memory.savedCount > 0;
+  const mode = modeLabel(form.agentMode);
+  const comparison = routes.map((route) => ({
+    id: route.id,
+    name: route.name,
+    bestFor: routeBestUse(route, form),
+    fit: route.modeFit
+  }));
+  const selected = selectedRoute || bestRoute;
+  const fatigueNote =
+    selected.difficultyScore < 38
+      ? 'low fatigue load'
+      : selected.difficultyScore < 62
+        ? 'moderate endurance load'
+        : 'high fatigue load';
+  const hydrationNote =
+    selected.stops.length > 0
+      ? `${selected.stops.length} useful stops along the route`
+      : 'no planned stop detours needed for this distance';
+
+  return {
+    bestRoute,
+    headline: `${bestRoute.name} is the strongest ${mode.toLowerCase()} choice.`,
+    recommendation: `${bestRoute.name} balances ${formatDistance(bestRoute.distanceKm)}, ${bestRoute.safetyScore}/100 safety, ${hydrationNote}, and ${fatigueNote}.`,
+    comparison,
+    reasoning: [
+      `Best match score: ${bestRoute.modeFit}/100 for ${mode}.`,
+      `Safety: ${bestRoute.safetyScore}/100 with route lines snapped to streets and paths.`,
+      `Training load: ${bestRoute.difficultyScore}/100 with ${bestRoute.elevationGain} m gain.`,
+      `Hydration: ${hydrationNote}.`
+    ],
+    safety: [
+      form.agentMode === 'safe-night'
+        ? 'Night mode prioritizes safer corridors, transit access, and lower isolation.'
+        : 'Safety score favors lower traffic, parks/paths, and practical exit points.',
+      selected.routeType === 'one-way'
+        ? 'One-way route should finish near transit before committing to the full run.'
+        : 'Loop route keeps the finish close to the start area.'
+    ],
+    weather: [
+      selected.distanceKm >= 25
+        ? 'Long-run hydration window: carry electrolytes and plan a refill.'
+        : 'Comfortable training window: light wind and no precipitation flag in the demo model.',
+      selected.distanceKm >= 30 ? 'Fuel early; avoid waiting until fatigue starts.' : 'Normal clothing and water planning should be enough.'
+    ],
+    memory: savedMemory
+      ? `Memory sees ${memory.savedCount} saved route${memory.savedCount === 1 ? '' : 's'}, ${memory.totalDistance} km total, and a preference for ${memory.favoriteStyle}.`
+      : 'Memory is ready; save a route and the agent will start adapting future suggestions.',
+    adaptive: savedMemory
+      ? `Next run can bias toward ${memory.favoriteStyle} and stay near your ${memory.averageDistance} km saved-route average.`
+      : 'After one saved route, the agent can personalize distance, terrain, and difficulty.',
+    mongodb: 'MongoDB Atlas/MCP-ready memory surface: profile, route history, preferences, and AI notes can map directly to collections.'
+  };
+}
+
+function applyAgentPromptToForm(prompt, form) {
+  const text = prompt.toLowerCase();
+  const next = { ...form };
+  const changes = [];
+  const greetingPattern = /^(hi|hello|hey|yo|sup|thanks|thank you)[!. ]*$/i;
+
+  if (greetingPattern.test(prompt.trim())) {
+    return {
+      form: next,
+      response:
+        'Hey. Tell me what kind of run you want and I will adapt the route. Try "avoid hills", "make it safer at night", "more scenic trails", or "shorter recovery run".',
+      shouldGenerate: false
+    };
+  }
+
+  if (text.includes('avoid hill') || text.includes('flat') || text.includes('leg pain') || text.includes('knee')) {
+    next.style = 'flat';
+    next.routeType = 'out-and-back';
+    next.trainingGoal = text.includes('leg pain') || text.includes('knee') ? 'Recovery run' : next.trainingGoal;
+    next.agentMode = text.includes('leg pain') || text.includes('knee') ? 'recovery' : next.agentMode;
+    next.distanceKm = text.includes('leg pain') || text.includes('knee') ? round(clamp(Number(form.distanceKm) * 0.8, 1, 60), 1) : form.distanceKm;
+    changes.push('reduced hill exposure');
+    changes.push('used out-and-back geometry for better distance accuracy');
+  }
+
+  if (text.includes('night') || text.includes('safer') || text.includes('safe')) {
+    next.style = 'night';
+    next.agentMode = 'safe-night';
+    next.routeType = 'loop';
+    changes.push('prioritized safer night routing');
+  }
+
+  if (text.includes('scenic') || text.includes('trail') || text.includes('park')) {
+    next.style = 'parks';
+    next.routeType = 'scenic';
+    next.agentMode = 'scenic';
+    changes.push('biased toward scenic parks and trails');
+  }
+
+  if (text.includes('water') || text.includes('bathroom') || text.includes('stop')) {
+    next.style = 'beginner';
+    changes.push('favored routes with practical stops');
+  }
+
+  if (text.includes('tempo') || text.includes('speed')) {
+    next.style = 'road';
+    next.trainingGoal = 'Tempo route';
+    next.agentMode = 'speedwork';
+    next.routeType = 'loop';
+    changes.push('switched to cleaner tempo terrain');
+  }
+
+  if (text.includes('longer')) {
+    next.distanceKm = round(clamp(Number(form.distanceKm) + 2, 1, 60), 1);
+    changes.push('increased distance');
+  }
+
+  if (text.includes('shorter') || text.includes('recovery')) {
+    next.distanceKm = round(clamp(Number(form.distanceKm) * 0.85, 1, 60), 1);
+    next.trainingGoal = 'Recovery run';
+    next.agentMode = 'recovery';
+    changes.push('lowered training load');
+  }
+
+  if (changes.length === 0) {
+    return {
+      form: next,
+      response:
+        'I did not detect a route change yet. Try asking for terrain, safety, distance, water stops, pace work, or recovery adjustments.',
+      shouldGenerate: false
+    };
+  }
+
+  return {
+    form: next,
+    response: `Adjusted: ${changes.join(', ')}.`,
+    shouldGenerate: true
   };
 }
 
@@ -638,7 +869,7 @@ function RouteMap({ routes, selectedRouteId, onSelectRoute, routing }) {
   );
 }
 
-function RouteCard({ route, selected, onSelect, onSave, isSaved }) {
+function RouteCard({ route, selected, onSelect, onSave, isSaved, bestFor }) {
   return (
     <article className={`routeCard ${selected ? 'selected' : ''}`}>
       <button className="routeCardButton" onClick={onSelect} type="button">
@@ -654,6 +885,20 @@ function RouteCard({ route, selected, onSelect, onSave, isSaved }) {
         <Stat icon={Timer} label="Time" value={route.estimatedTime} />
         <Stat icon={Mountain} label="Gain" value={`${route.elevationGain} m`} />
       </div>
+      <div className="aiCardStrip">
+        <span>
+          <Brain aria-hidden="true" size={15} />
+          {bestFor}
+        </span>
+        <strong>{route.modeFit}/100 fit</strong>
+      </div>
+      <div className="miniScores">
+        <span>Scenic {route.scenicScore}</span>
+        <span>Hydration {route.hydrationScore}</span>
+      </div>
+      <div className={`distanceBadge ${route.distanceStatus === 'Within target range' ? 'good' : 'warning'}`}>
+        {route.distanceStatus}
+      </div>
       <ScoreMeter label="Safety" value={route.safetyScore} />
       <ScoreMeter label="Difficulty" value={route.difficultyScore} tone="orange" />
       <button className="secondaryButton fullWidth" onClick={onSave} type="button">
@@ -668,6 +913,15 @@ function PlannerForm({ form, setForm, onGenerate, onUseLocation, locating, routi
   const update = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
+  const applyMode = (mode) => {
+    setForm((current) => ({
+      ...current,
+      agentMode: mode.id,
+      routeType: mode.routeType,
+      style: mode.style,
+      trainingGoal: mode.trainingGoal
+    }));
+  };
 
   return (
     <section className="plannerPanel" aria-label="Route input">
@@ -676,8 +930,8 @@ function PlannerForm({ form, setForm, onGenerate, onUseLocation, locating, routi
           <Navigation aria-hidden="true" size={22} />
         </span>
         <div>
-          <p className="eyebrow">LongRun Route Planner</p>
-          <h1>Plan your long run</h1>
+          <p className="eyebrow">RunRoute AI</p>
+          <h1>AI running agent</h1>
         </div>
       </div>
 
@@ -728,6 +982,22 @@ function PlannerForm({ form, setForm, onGenerate, onUseLocation, locating, routi
             />
             <span>min/km</span>
           </div>
+        </div>
+      </div>
+
+      <div className="fieldGroup">
+        <label>AI mode</label>
+        <div className="modeGrid" role="group" aria-label="AI route personality mode">
+          {AGENT_MODES.map((mode) => (
+            <button
+              className={form.agentMode === mode.id ? 'modeOption active' : 'modeOption'}
+              key={mode.id}
+              onClick={() => applyMode(mode)}
+              type="button"
+            >
+              {mode.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -786,6 +1056,110 @@ function PlannerForm({ form, setForm, onGenerate, onUseLocation, locating, routi
         {routing ? 'Snapping routes...' : 'Generate 3 routes'}
       </button>
     </section>
+  );
+}
+
+function AIAssistantPanel({
+  analysis,
+  agentMessages,
+  agentPrompt,
+  darkMode,
+  onPromptChange,
+  onPromptSubmit,
+  onSelectRoute,
+  onToggleTheme,
+  routing
+}) {
+  return (
+    <aside className="aiPanel" aria-label="AI route assistant">
+      <div className="aiHeader">
+        <span className="aiIcon">
+          <Bot aria-hidden="true" size={21} />
+        </span>
+        <div>
+          <span className="eyebrow">Agent recommendation</span>
+          <h2>{analysis.headline}</h2>
+        </div>
+        <button className="iconButton themeButton" onClick={onToggleTheme} type="button" title="Toggle dark mode">
+          {darkMode ? <Sun aria-hidden="true" size={18} /> : <Moon aria-hidden="true" size={18} />}
+          <span className="srOnly">Toggle dark mode</span>
+        </button>
+      </div>
+
+      <p className="aiRecommendation">{analysis.recommendation}</p>
+
+      <section className="aiSection">
+        <h3>Why this route?</h3>
+        <div className="reasonList">
+          {analysis.reasoning.map((reason) => (
+            <div key={reason}>
+              <Check aria-hidden="true" size={16} />
+              <span>{reason}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="aiSection">
+        <h3>Route comparison</h3>
+        <div className="comparisonTable">
+          {analysis.comparison.map((row) => (
+            <button key={row.id} onClick={() => onSelectRoute(row.id)} type="button">
+              <span>{row.name}</span>
+              <strong>{row.bestFor}</strong>
+              <small>{row.fit}/100</small>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="aiInsightGrid">
+        <div>
+          <ShieldCheck aria-hidden="true" size={18} />
+          <strong>Safety intelligence</strong>
+          <span>{analysis.safety[0]}</span>
+        </div>
+        <div>
+          <CloudSun aria-hidden="true" size={18} />
+          <strong>Weather adaptation</strong>
+          <span>{analysis.weather[0]}</span>
+        </div>
+      </section>
+
+      <section className="memoryBox">
+        <Database aria-hidden="true" size={18} />
+        <div>
+          <strong>Adaptive memory</strong>
+          <span>{analysis.memory}</span>
+          <small>{analysis.mongodb}</small>
+        </div>
+      </section>
+
+      <form className="agentComposer" onSubmit={onPromptSubmit}>
+        <label htmlFor="agentPrompt">Ask RunRoute AI</label>
+        <div>
+          <input
+            id="agentPrompt"
+            value={agentPrompt}
+            onChange={(event) => onPromptChange(event.target.value)}
+            placeholder="Avoid hills today"
+          />
+          <button disabled={routing} type="submit" title="Send prompt">
+            <Send aria-hidden="true" size={17} />
+            <span className="srOnly">Send prompt</span>
+          </button>
+        </div>
+      </form>
+
+      <div className="agentMessages" aria-live="polite">
+        {agentMessages.slice(-3).map((message) => (
+          <p className={message.role} key={message.id}>
+            <span>{message.role === 'user' ? 'You' : 'AI'}</span>
+            {message.text}
+          </p>
+        ))}
+      </div>
+    </aside>
   );
 }
 
@@ -982,15 +1356,25 @@ function App() {
     paceMinPerKm: 7,
     routeType: 'scenic',
     style: 'parks',
-    trainingGoal: 'Marathon prep'
+    trainingGoal: 'Marathon prep',
+    agentMode: 'marathon'
   };
   const [form, setForm] = useState(initialForm);
   const [routes, setRoutes] = useState(() => generateEstimatedRoutes(initialForm));
   const [selectedRouteId, setSelectedRouteId] = useState(routes[0].id);
   const [savedRoutes, setSavedRoutes] = useLocalStorageState('longrun.savedRoutes', []);
+  const [darkMode, setDarkMode] = useLocalStorageState('runroute.darkMode', false);
   const [activeTab, setActiveTab] = useState('planner');
   const [locating, setLocating] = useState(false);
   const [routing, setRouting] = useState(false);
+  const [agentPrompt, setAgentPrompt] = useState('');
+  const [agentMessages, setAgentMessages] = useState([
+    {
+      id: 'welcome',
+      role: 'assistant',
+      text: 'I will compare the routes, explain the best choice, and adapt when you ask for changes.'
+    }
+  ]);
   const [toast, setToast] = useState('');
   const routeRequestRef = useRef(0);
   const initialRoutingRef = useRef(false);
@@ -1001,6 +1385,15 @@ function App() {
   );
 
   const savedIds = useMemo(() => new Set(savedRoutes.map((route) => route.id)), [savedRoutes]);
+  const runnerMemory = useMemo(() => buildRunnerMemory(savedRoutes), [savedRoutes]);
+  const agentAnalysis = useMemo(
+    () => analyzeRoutes(routes, selectedRoute, form, runnerMemory),
+    [form, routes, runnerMemory, selectedRoute]
+  );
+
+  useEffect(() => {
+    document.title = 'RunRoute AI';
+  }, []);
 
   const showToast = (message) => {
     setToast(message);
@@ -1052,6 +1445,23 @@ function App() {
     void generateAndApplyRoutes(form);
   };
 
+  const handleAgentSubmit = (event) => {
+    event.preventDefault();
+    const prompt = agentPrompt.trim();
+    if (!prompt) return;
+
+    const { form: nextForm, response, shouldGenerate } = applyAgentPromptToForm(prompt, form);
+    setAgentMessages((current) => [
+      ...current,
+      { id: `user-${Date.now()}`, role: 'user', text: prompt },
+      { id: `assistant-${Date.now()}`, role: 'assistant', text: response }
+    ]);
+    setAgentPrompt('');
+    if (shouldGenerate) {
+      void generateAndApplyRoutes(nextForm);
+    }
+  };
+
   const handleUseLocation = () => {
     if (!navigator.geolocation) {
       showToast('Geolocation is unavailable in this browser');
@@ -1094,9 +1504,18 @@ function App() {
       {
         ...route,
         savedId: `${route.id}-${Date.now()}`,
-        savedAt: new Date().toISOString()
+        savedAt: new Date().toISOString(),
+        aiNote: agentAnalysis.recommendation
       },
       ...current
+    ]);
+    setAgentMessages((current) => [
+      ...current,
+      {
+        id: `memory-${Date.now()}`,
+        role: 'assistant',
+        text: `Saved ${route.name}. I will use this as memory for future ${modeLabel(form.agentMode).toLowerCase()} recommendations.`
+      }
     ]);
     showToast('Route saved');
   };
@@ -1138,7 +1557,7 @@ function App() {
   };
 
   return (
-    <main className="appShell">
+    <main className={`appShell ${darkMode ? 'darkMode' : ''}`}>
       <div className="topNav" aria-label="Primary">
         <button
           className={activeTab === 'planner' ? 'active' : ''}
@@ -1155,6 +1574,10 @@ function App() {
         >
           <Save aria-hidden="true" size={18} />
           Saved
+        </button>
+        <button onClick={() => setDarkMode((current) => !current)} type="button">
+          {darkMode ? <Sun aria-hidden="true" size={18} /> : <Moon aria-hidden="true" size={18} />}
+          {darkMode ? 'Light' : 'Dark'}
         </button>
       </div>
 
@@ -1179,7 +1602,8 @@ function App() {
               <ShieldCheck aria-hidden="true" size={18} />
               <span>
                 Target range: <strong>{selectedRoute.targetRange}</strong> · Lines:{' '}
-                <strong>{selectedRoute.source === 'road' ? 'streets/paths' : 'estimated'}</strong>
+                <strong>{selectedRoute.source === 'road' ? 'streets/paths' : 'estimated'}</strong> ·{' '}
+                <strong>{selectedRoute.distanceStatus}</strong>
               </span>
             </div>
             <div className="routeList">
@@ -1191,16 +1615,30 @@ function App() {
                   onSelect={() => setSelectedRouteId(route.id)}
                   onSave={() => saveRoute(route)}
                   isSaved={savedIds.has(route.id)}
+                  bestFor={routeBestUse(route, form)}
                 />
               ))}
             </div>
           </div>
-          <RouteDetails
-            route={selectedRoute}
-            onExportGpx={() => exportSelected('gpx')}
-            onExportKml={() => exportSelected('kml')}
-            onShare={shareSelected}
-          />
+          <div className="rightColumn">
+            <AIAssistantPanel
+              analysis={agentAnalysis}
+              agentMessages={agentMessages}
+              agentPrompt={agentPrompt}
+              darkMode={darkMode}
+              onPromptChange={setAgentPrompt}
+              onPromptSubmit={handleAgentSubmit}
+              onSelectRoute={setSelectedRouteId}
+              onToggleTheme={() => setDarkMode((current) => !current)}
+              routing={routing}
+            />
+            <RouteDetails
+              route={selectedRoute}
+              onExportGpx={() => exportSelected('gpx')}
+              onExportKml={() => exportSelected('kml')}
+              onShare={shareSelected}
+            />
+          </div>
         </div>
       ) : (
         <SavedRoutes routes={savedRoutes} onSelect={openSavedRoute} onDelete={deleteSavedRoute} />

@@ -35,10 +35,36 @@ body {
     radial-gradient(circle at 90% 8%, rgba(231, 111, 81, 0.1), transparent 24%);
 }
 
+.appShell.darkMode {
+  --surface: #121a17;
+  --surface-soft: #17231f;
+  --ink: #edf5ef;
+  --muted: #a7b8af;
+  --line: #2e4239;
+  --green: #46b784;
+  --green-dark: #79d8a8;
+  --blue: #7aa2ff;
+  --orange: #ff966d;
+  --amber: #ffd166;
+  --red: #ff7b86;
+  --shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+  min-height: calc(100vh - 44px);
+  background:
+    linear-gradient(180deg, rgba(14, 22, 19, 0.98), rgba(20, 31, 27, 0.98)),
+    radial-gradient(circle at 15% 20%, rgba(122, 162, 255, 0.12), transparent 28%),
+    radial-gradient(circle at 90% 8%, rgba(255, 150, 109, 0.12), transparent 24%);
+  border-radius: 8px;
+}
+
 button,
 input,
 select {
   font: inherit;
+}
+
+.darkMode input,
+.darkMode select {
+  color: var(--ink);
 }
 
 button {
@@ -69,6 +95,10 @@ select:focus-visible {
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: 0 10px 30px rgba(33, 52, 42, 0.08);
+}
+
+.darkMode .topNav {
+  background: rgba(18, 26, 23, 0.82);
 }
 
 .topNav button {
@@ -105,6 +135,13 @@ select:focus-visible {
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: var(--shadow);
+}
+
+.darkMode .plannerPanel,
+.darkMode .mapPanel,
+.darkMode .detailsPanel,
+.darkMode .savedPanel {
+  border-color: var(--line);
 }
 
 .plannerPanel {
@@ -313,6 +350,34 @@ select {
   background: #e8f5e9;
 }
 
+.darkMode .styleOption.active {
+  background: rgba(70, 183, 132, 0.16);
+  border-color: rgba(70, 183, 132, 0.48);
+}
+
+.modeGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.modeOption {
+  min-height: 38px;
+  padding: 0 9px;
+  color: var(--muted);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 0.8rem;
+  font-weight: 850;
+}
+
+.modeOption.active {
+  color: #ffffff;
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
 .primaryButton,
 .secondaryButton,
 .textButton {
@@ -346,6 +411,12 @@ select {
   color: var(--ink);
   background: #ffffff;
   border: 1px solid var(--line);
+}
+
+.darkMode .secondaryButton,
+.darkMode .routeBadge {
+  color: var(--ink);
+  background: var(--surface-soft);
 }
 
 .secondaryButton:hover {
@@ -471,9 +542,30 @@ select {
   pointer-events: none;
 }
 
+.darkMode .mapHint {
+  color: var(--ink);
+  background: rgba(18, 26, 23, 0.9);
+}
+
 .mapHint.loading {
   color: #173452;
   border-color: rgba(47, 101, 215, 0.28);
+}
+
+.leaflet-overlay-pane svg path {
+  animation: routeDraw 900ms ease-out both;
+}
+
+@keyframes routeDraw {
+  from {
+    stroke-dasharray: 1 18;
+    stroke-dashoffset: 48;
+  }
+
+  to {
+    stroke-dasharray: 999 0;
+    stroke-dashoffset: 0;
+  }
 }
 
 .stopMarker {
@@ -523,6 +615,12 @@ select {
   font-size: 0.9rem;
 }
 
+.darkMode .rangeNotice {
+  color: var(--green-dark);
+  background: rgba(70, 183, 132, 0.13);
+  border-color: rgba(70, 183, 132, 0.32);
+}
+
 .routeList {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -542,6 +640,84 @@ select {
 .routeCard.selected {
   border-color: #8fc39e;
   box-shadow: 0 14px 36px rgba(31, 122, 90, 0.16);
+}
+
+.aiCardStrip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: #eef6ff;
+  border: 1px solid #c9dcff;
+  border-radius: 7px;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.darkMode .aiCardStrip {
+  background: rgba(122, 162, 255, 0.14);
+  border-color: rgba(122, 162, 255, 0.3);
+}
+
+.aiCardStrip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.aiCardStrip strong {
+  white-space: nowrap;
+}
+
+.miniScores {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.miniScores span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 8px;
+  color: var(--muted);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 850;
+}
+
+.distanceBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+
+.distanceBadge.good {
+  color: var(--green-dark);
+  background: rgba(31, 122, 90, 0.12);
+  border: 1px solid rgba(31, 122, 90, 0.26);
+}
+
+.distanceBadge.warning {
+  color: #7a4a10;
+  background: rgba(240, 168, 76, 0.18);
+  border: 1px solid rgba(240, 168, 76, 0.38);
+}
+
+.darkMode .distanceBadge.warning {
+  color: #ffd166;
 }
 
 .routeCardButton {
@@ -642,14 +818,218 @@ select {
   background: var(--orange);
 }
 
-.detailsPanel {
+.rightColumn {
   position: sticky;
   top: 18px;
   display: grid;
-  gap: 18px;
+  gap: 12px;
   max-height: calc(100vh - 36px);
   overflow: auto;
+}
+
+.aiPanel,
+.detailsPanel {
+  display: grid;
+  gap: 18px;
   padding: 18px;
+}
+
+.aiPanel {
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.darkMode .aiPanel,
+.darkMode .plannerPanel,
+.darkMode .mapPanel,
+.darkMode .detailsPanel,
+.darkMode .savedPanel,
+.darkMode .routeCard,
+.darkMode .savedCard {
+  background: rgba(18, 26, 23, 0.94);
+}
+
+.aiHeader {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  gap: 10px;
+  align-items: center;
+}
+
+.aiIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: #ffffff;
+  background: var(--blue);
+  border-radius: 8px;
+}
+
+.themeButton {
+  color: var(--blue);
+  background: var(--surface-soft);
+}
+
+.aiRecommendation {
+  color: var(--ink);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.aiSection {
+  display: grid;
+  gap: 10px;
+}
+
+.reasonList {
+  display: grid;
+  gap: 8px;
+}
+
+.reasonList div {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.reasonList svg {
+  color: var(--green);
+}
+
+.comparisonTable {
+  display: grid;
+  gap: 7px;
+}
+
+.comparisonTable button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 10px;
+  color: var(--muted);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  text-align: left;
+}
+
+.comparisonTable span,
+.comparisonTable strong,
+.comparisonTable small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comparisonTable strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.comparisonTable small {
+  color: var(--blue);
+  font-weight: 900;
+}
+
+.aiInsightGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.aiInsightGrid div,
+.memoryBox {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  color: var(--muted);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.aiInsightGrid strong,
+.memoryBox strong {
+  color: var(--ink);
+}
+
+.memoryBox {
+  grid-template-columns: 22px minmax(0, 1fr);
+}
+
+.memoryBox div {
+  display: grid;
+  gap: 5px;
+}
+
+.memoryBox small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.agentComposer {
+  display: grid;
+  gap: 8px;
+}
+
+.agentComposer label {
+  font-size: 0.84rem;
+}
+
+.agentComposer div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 8px;
+}
+
+.agentComposer button {
+  display: inline-grid;
+  place-items: center;
+  color: #ffffff;
+  background: var(--blue);
+  border: 1px solid var(--blue);
+  border-radius: 7px;
+}
+
+.agentComposer button:disabled {
+  opacity: 0.65;
+}
+
+.agentMessages {
+  display: grid;
+  gap: 8px;
+}
+
+.agentMessages p {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  color: var(--muted);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.agentMessages p.user {
+  border-color: rgba(47, 101, 215, 0.28);
+}
+
+.agentMessages span {
+  color: var(--ink);
+  font-weight: 900;
 }
 
 .detailsHeader,
@@ -686,6 +1066,12 @@ select {
   border-radius: 8px;
 }
 
+.darkMode .weatherStrip {
+  color: #c9eff6;
+  background: rgba(122, 162, 255, 0.12);
+  border-color: rgba(122, 162, 255, 0.28);
+}
+
 .weatherStrip div {
   display: grid;
   gap: 4px;
@@ -715,6 +1101,10 @@ select {
   background: #f6f9f3;
   border: 1px solid var(--line);
   border-radius: 8px;
+}
+
+.darkMode .elevationChart {
+  background: var(--surface-soft);
 }
 
 .elevationChart svg {
@@ -797,6 +1187,10 @@ select {
   border-radius: 8px;
 }
 
+.darkMode .emptyState {
+  border-color: var(--line);
+}
+
 .savedCardTop {
   gap: 10px;
   min-width: 0;
@@ -855,10 +1249,11 @@ select {
     grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
   }
 
-  .detailsPanel {
+  .rightColumn {
     position: static;
     grid-column: 1 / -1;
     max-height: none;
+    overflow: visible;
   }
 
   .detailsStats,
@@ -888,7 +1283,7 @@ select {
   }
 
   .plannerPanel,
-  .detailsPanel {
+  .rightColumn {
     position: static;
   }
 
@@ -924,6 +1319,7 @@ select {
 
   .twoColumn,
   .styleGrid,
+  .modeGrid,
   .actionRow {
     grid-template-columns: 1fr;
   }
