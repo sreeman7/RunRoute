@@ -1218,6 +1218,302 @@ select {
   border-radius: 8px;
 }
 
+.runModeShell {
+  display: grid;
+  gap: 16px;
+}
+
+.runHero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.darkMode .runHero,
+.darkMode .runDashboard {
+  background: rgba(18, 26, 23, 0.94);
+}
+
+.runHero div {
+  display: grid;
+  gap: 5px;
+}
+
+.runHero p {
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.runHero .secondaryButton {
+  flex: 0 0 auto;
+}
+
+.runLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 430px);
+  gap: 16px;
+  align-items: start;
+}
+
+.runPrimary {
+  display: grid;
+  gap: 12px;
+}
+
+.runControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.darkMode .runControls {
+  background: rgba(18, 26, 23, 0.94);
+}
+
+.runControls .primaryButton,
+.runControls .secondaryButton {
+  width: auto;
+  min-width: 150px;
+}
+
+.runControls .textButton {
+  min-width: 96px;
+}
+
+.runAlert {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  color: #70380d;
+  background: rgba(240, 168, 76, 0.18);
+  border: 1px solid rgba(240, 168, 76, 0.42);
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.darkMode .runAlert {
+  color: #ffd166;
+}
+
+.runDashboard {
+  position: sticky;
+  top: 18px;
+  display: grid;
+  gap: 12px;
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.recordingStatus {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 10px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.recordingStatus strong {
+  color: var(--ink);
+}
+
+.recordingStatus small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.recordingDot {
+  width: 10px;
+  height: 10px;
+  background: var(--muted);
+  border-radius: 999px;
+  box-shadow: 0 0 0 4px rgba(97, 112, 104, 0.12);
+}
+
+.recordingDot.recording {
+  background: var(--red);
+  box-shadow: 0 0 0 4px rgba(191, 63, 74, 0.16);
+}
+
+.recordingDot.paused {
+  background: var(--amber);
+  box-shadow: 0 0 0 4px rgba(240, 168, 76, 0.2);
+}
+
+.recordingDot.finished {
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(31, 122, 90, 0.16);
+}
+
+.runStatsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.runStatsGrid .stat,
+.nextInstruction,
+.routeProgress,
+.turnList,
+.activityHistory {
+  padding: 12px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.runStatsGrid .stat {
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  min-height: 74px;
+}
+
+.runStatsGrid .stat strong {
+  grid-column: 1 / -1;
+  font-size: 1.1rem;
+  text-align: left;
+}
+
+.nextInstruction {
+  display: grid;
+  gap: 8px;
+}
+
+.nextInstruction h2 {
+  font-size: 1.32rem;
+}
+
+.nextInstruction p {
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.nextInstruction strong {
+  color: var(--blue);
+}
+
+.routeProgress {
+  display: grid;
+  gap: 8px;
+}
+
+.routeProgress div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 850;
+}
+
+.routeProgress strong {
+  color: var(--ink);
+}
+
+.progressTrack {
+  height: 10px;
+  overflow: hidden;
+  background: #dfe8dc;
+  border-radius: 999px;
+}
+
+.darkMode .progressTrack {
+  background: #26382f;
+}
+
+.progressTrack span {
+  display: block;
+  height: 100%;
+  background: var(--green);
+  border-radius: inherit;
+}
+
+.routeProgress small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.turnList,
+.activityHistory {
+  display: grid;
+  gap: 8px;
+}
+
+.turnList h3,
+.activityHistory h3 {
+  margin-bottom: 2px;
+}
+
+.turnList div,
+.activityHistory div {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.64);
+  border: 1px solid rgba(25, 36, 31, 0.08);
+  border-radius: 7px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.darkMode .turnList div,
+.darkMode .activityHistory div {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.turnList div.current {
+  border-color: rgba(47, 101, 215, 0.36);
+  box-shadow: inset 3px 0 0 var(--blue);
+}
+
+.turnList div.completed {
+  opacity: 0.62;
+}
+
+.turnList span {
+  color: var(--green-dark);
+  font-weight: 900;
+}
+
+.turnList strong,
+.activityHistory strong {
+  color: var(--ink);
+}
+
+.activityHistory span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 .toast {
   position: fixed;
   right: 24px;
@@ -1256,6 +1552,16 @@ select {
     overflow: visible;
   }
 
+  .runLayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .runDashboard {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+
   .detailsStats,
   .stopList,
   .runPlan {
@@ -1274,11 +1580,13 @@ select {
 
   .topNav button {
     flex: 1;
+    min-width: 0;
   }
 
   .plannerLayout,
   .routeList,
-  .savedGrid {
+  .savedGrid,
+  .runStatsGrid {
     grid-template-columns: 1fr;
   }
 
@@ -1288,9 +1596,14 @@ select {
   }
 
   .mapToolbar,
-  .savedHeader {
+  .savedHeader,
+  .runHero {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .runHero .secondaryButton {
+    width: 100%;
   }
 
   .mapLegend {
@@ -1313,7 +1626,9 @@ select {
 @media (max-width: 520px) {
   .plannerPanel,
   .detailsPanel,
-  .savedPanel {
+  .savedPanel,
+  .runDashboard,
+  .runHero {
     padding: 14px;
   }
 
@@ -1330,5 +1645,38 @@ select {
 
   .brandBlock {
     align-items: flex-start;
+  }
+
+  .topNav {
+    gap: 4px;
+  }
+
+  .topNav button {
+    flex-direction: column;
+    gap: 2px;
+    height: 48px;
+    padding: 4px;
+    font-size: 0.72rem;
+    line-height: 1;
+  }
+
+  .topNav button svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .runControls .primaryButton,
+  .runControls .secondaryButton,
+  .runControls .textButton {
+    width: 100%;
+  }
+
+  .recordingStatus {
+    grid-template-columns: 16px minmax(0, 1fr);
+  }
+
+  .recordingStatus small {
+    grid-column: 2;
+    white-space: normal;
   }
 }

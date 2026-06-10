@@ -25,6 +25,8 @@ import {
   Moon,
   Mountain,
   Navigation,
+  Pause,
+  Play,
   RefreshCcw,
   Route,
   Save,
@@ -32,6 +34,7 @@ import {
   Share2,
   ShieldCheck,
   Sparkles,
+  Square,
   Sun,
   Timer,
   Toilet,
@@ -152,6 +155,130 @@ function routeDistanceKm(coordinates) {
   }, 0);
 }
 
+function cumulativeRouteDistances(coordinates) {
+  const distances = [0];
+  for (let index = 1; index < coordinates.length; index += 1) {
+    distances.push(distances[index - 1] + haversineDistanceKm(coordinates[index - 1], coordinates[index]));
+  }
+  return distances;
+}
+
+function bearingBetween(first, second) {
+  const lat1 = toRadians(first.lat);
+  const lat2 = toRadians(second.lat);
+  const deltaLng = toRadians(second.lng - first.lng);
+  const y = Math.sin(deltaLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLng);
+  return (Math.atan2(y, x) * 180) / Math.PI;
+}
+
+function normalizeBearingDelta(delta) {
+  return ((delta + 540) % 360) - 180;
+}
+
+function turnInstruction(delta) {
+  const absolute = Math.abs(delta);
+  if (absolute < 25) return 'Continue straight';
+  if (absolute < 55) return delta > 0 ? 'Slight right' : 'Slight left';
+  if (absolute < 125) return delta > 0 ? 'Turn right' : 'Turn left';
+  return 'Turn around';
+}
+
+function formatClock(totalSeconds) {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+function formatRunPace(distanceKm, elapsedSeconds) {
+  if (!distanceKm || distanceKm < 0.01 || !elapsedSeconds) return '-- /km';
+  return formatPace(elapsedSeconds / 60 / distanceKm);
+}
+
+function buildNavigationSteps(route) {
+  if (!route?.coordinates?.length) return [];
+
+  const coordinates = route.coordinates;
+  const cumulative = cumulativeRouteDistances(coordinates);
+  const steps = [
+    {
+      id: 'start',
+      distanceKm: 0,
+      instruction: `Start ${route.name}`,
+      note: 'Begin recording and follow the highlighted route.'
+    }
+  ];
+  let lastStepDistance = 0;
+  let previousBearing = null;
+
+  for (let index = 1; index < coordinates.length; index += 1) {
+    const currentBearing = bearingBetween(coordinates[index - 1], coordinates[index]);
+    if (previousBearing !== null) {
+      const delta = normalizeBearingDelta(currentBearing - previousBearing);
+      const distanceSinceLastStep = cumulative[index] - lastStepDistance;
+      if (Math.abs(delta) >= 34 && distanceSinceLastStep >= 0.18) {
+        steps.push({
+          id: `turn-${index}`,
+          distanceKm: cumulative[index],
+          instruction: turnInstruction(delta),
+          note: `At ${formatDistance(cumulative[index])}, continue on the selected route.`
+        });
+        lastStepDistance = cumulative[index];
+      }
+    }
+    previousBearing = currentBearing;
+  }
+
+  route.stops?.forEach((stop) => {
+    steps.push({
+      id: `stop-${stop.id}`,
+      distanceKm: stop.km,
+      instruction: `${STOP_TYPES[stop.type].label} stop nearby`,
+      note: `${stop.name} around ${formatDistance(stop.km)}.`
+    });
+  });
+
+  steps.push({
+    id: 'finish',
+    distanceKm: route.distanceKm,
+    instruction: 'Finish route',
+    note: route.routeType === 'one-way' ? 'Finish near the planned endpoint.' : 'Return to the start area.'
+  });
+
+  return steps
+    .sort((first, second) => first.distanceKm - second.distanceKm)
+    .filter((step, index, allSteps) => index === 0 || Math.abs(step.distanceKm - allSteps[index - 1].distanceKm) > 0.05);
+}
+
+function getRouteProgress(route, position) {
+  if (!route?.coordinates?.length || !position) {
+    return { nearestDistanceM: null, progressKm: 0, progressPercent: 0 };
+  }
+
+  const cumulative = cumulativeRouteDistances(route.coordinates);
+  let nearestIndex = 0;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  route.coordinates.forEach((point, index) => {
+    const distance = haversineDistanceKm(point, position);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestIndex = index;
+    }
+  });
+
+  const progressKm = cumulative[nearestIndex] || 0;
+  return {
+    nearestDistanceM: Math.round(nearestDistance * 1000),
+    progressKm,
+    progressPercent: clamp((progressKm / Math.max(route.distanceKm, 0.1)) * 100, 0, 100)
+  };
+}
+
 function destinationPoint(start, distanceKm, bearingDegrees) {
   const earthRadiusKm = 6371;
   const angularDistance = distanceKm / earthRadiusKm;
@@ -234,6 +361,30 @@ function buildCoordinates(start, targetKm, routeType, style, index, scale = 1) {
   }
   points.push(start);
   return points;
+}
+
+function estimatedScaleCandidates(targetKm, routeType) {
+  if (targetKm < 3) return [0.05, 0.08, 0.12, 0.16, 0.2, 0.25, 0.32, 0.42, 0.55, 0.7, 0.9, 1.12];
+  if (routeType === 'one-way') return [0.55, 0.66, 0.78, 0.9, 1, 1.12, 1.28, 1.45, 1.65];
+  if (routeType === 'out-and-back') return [0.45, 0.55, 0.66, 0.75, 0.84, 0.94, 1, 1.12, 1.28];
+  return [0.45, 0.55, 0.62, 0.7, 0.78, 0.8, 0.82, 0.86, 0.94, 1, 1.08, 1.2, 1.35];
+}
+
+function buildDistanceMatchedCoordinates(start, desiredDistance, routeType, style, index) {
+  let bestCoordinates = buildCoordinates(start, desiredDistance, routeType, style, index);
+  let bestGap = Math.abs(routeDistanceKm(bestCoordinates) - desiredDistance);
+
+  estimatedScaleCandidates(desiredDistance, routeType).forEach((scale) => {
+    const coordinates = buildCoordinates(start, desiredDistance, routeType, style, index, scale);
+    const gap = Math.abs(routeDistanceKm(coordinates) - desiredDistance);
+
+    if (gap < bestGap) {
+      bestCoordinates = coordinates;
+      bestGap = gap;
+    }
+  });
+
+  return bestCoordinates;
 }
 
 function buildStops(distanceKm, style, routeIndex) {
@@ -354,20 +505,21 @@ function createRoute(form, index, desiredDistanceKm, coordinates, source = 'esti
 
 function generateEstimatedRoutes(form) {
   const target = Number(form.distanceKm);
+  const start = form.start || DEFAULT_START;
 
   return ['Safest Corridor', 'Scenic Flow', 'Flat Finish'].map((_, index) => {
     const variance = [-0.012, 0.009, 0.018][index] * target;
     const desiredDistance = clamp(target + variance, target * 0.975, target * 1.025);
-    const coordinates = buildCoordinates(form.start || DEFAULT_START, desiredDistance, form.routeType, form.style, index);
+    const coordinates = buildDistanceMatchedCoordinates(start, desiredDistance, form.routeType, form.style, index);
     return createRoute(form, index, desiredDistance, coordinates);
   });
 }
 
 function routeScaleCandidates(form, desiredDistance) {
-  if (form.routeType === 'one-way') return [0.7, 0.85, 1, 1.2, 1.45, 1.7];
-  if (form.routeType === 'out-and-back') return [0.55, 0.7, 0.85, 1, 1.15, 1.3, 1.55];
+  if (form.routeType === 'one-way') return [0.55, 0.66, 0.78, 0.9, 1, 1.12, 1.28, 1.45, 1.7];
+  if (form.routeType === 'out-and-back') return [0.45, 0.55, 0.66, 0.75, 0.85, 1, 1.15, 1.3, 1.55];
   if (desiredDistance < 3) return [0.08, 0.12, 0.16, 0.2, 0.25, 0.3, 0.35, 0.42, 0.5, 0.62, 0.78, 0.95, 1.15, 1.4];
-  return [0.25, 0.32, 0.35, 0.42, 0.5, 0.62, 0.78, 0.95];
+  return [0.45, 0.55, 0.62, 0.7, 0.78, 0.8, 0.82, 0.86, 0.95, 1.08];
 }
 
 function routeShapeCandidates(index, desiredDistance, routeType) {
@@ -727,7 +879,7 @@ function ScoreMeter({ label, value, tone = 'green' }) {
   );
 }
 
-function RouteMap({ routes, selectedRouteId, onSelectRoute, routing }) {
+function RouteMap({ routes, selectedRouteId, onSelectRoute, routing, track = [] }) {
   const mapElementRef = useRef(null);
   const mapRef = useRef(null);
   const layerRef = useRef(null);
@@ -823,6 +975,32 @@ function RouteMap({ routes, selectedRouteId, onSelectRoute, routing }) {
         .addTo(layer);
     });
 
+    if (track.length > 0) {
+      const trackLatLngs = track.map((point) => [point.lat, point.lng]);
+      trackLatLngs.forEach((point) => bounds.extend(point));
+
+      if (trackLatLngs.length > 1) {
+        L.polyline(trackLatLngs, {
+          color: '#111827',
+          lineCap: 'round',
+          lineJoin: 'round',
+          opacity: 0.88,
+          weight: 5
+        }).addTo(layer);
+      }
+
+      const currentPoint = track[track.length - 1];
+      L.circleMarker([currentPoint.lat, currentPoint.lng], {
+        color: '#111827',
+        fillColor: '#ffffff',
+        fillOpacity: 1,
+        radius: 7,
+        weight: 3
+      })
+        .bindPopup('Current position')
+        .addTo(layer);
+    }
+
     if (bounds.isValid()) {
       const maxZoom = selectedRoute.distanceKm < 3 ? 16 : selectedRoute.distanceKm < 8 ? 15 : 14;
       map.fitBounds(bounds, {
@@ -831,7 +1009,7 @@ function RouteMap({ routes, selectedRouteId, onSelectRoute, routing }) {
         padding: [28, 28]
       });
     }
-  }, [onSelectRoute, routes, selectedRoute, selectedRouteId]);
+  }, [onSelectRoute, routes, selectedRoute, selectedRouteId, track]);
 
   return (
     <section className="mapPanel" aria-label="Route map">
@@ -1163,7 +1341,7 @@ function AIAssistantPanel({
   );
 }
 
-function RouteDetails({ route, onExportGpx, onExportKml, onShare }) {
+function RouteDetails({ route, onExportGpx, onExportKml, onShare, onStartNavigation }) {
   if (!route) return null;
 
   const weatherTone = route.distanceKm >= 30 ? 'Long-run hydration window' : 'Comfortable training window';
@@ -1272,6 +1450,11 @@ function RouteDetails({ route, onExportGpx, onExportKml, onShare }) {
         </ol>
       </section>
 
+      <button className="primaryButton" onClick={onStartNavigation} type="button">
+        <Navigation aria-hidden="true" size={18} />
+        Open live run mode
+      </button>
+
       <div className="actionRow">
         <button className="secondaryButton" onClick={onExportGpx} type="button">
           <ArrowDownToLine aria-hidden="true" size={17} />
@@ -1348,6 +1531,181 @@ function SavedRoutes({ routes, onSelect, onDelete }) {
   );
 }
 
+function RunMode({
+  route,
+  runSession,
+  savedActivities,
+  onBackToPlanner,
+  onFinishRun,
+  onPauseRun,
+  onResetRun,
+  onResumeRun,
+  onSaveActivity,
+  onStartRun
+}) {
+  const steps = useMemo(() => buildNavigationSteps(route), [route]);
+  const routeProgress = runSession.routeProgressKm || 0;
+  const completedDistance = Math.max(routeProgress, runSession.distanceKm || 0);
+  const progressPercent = clamp((completedDistance / Math.max(route.distanceKm, 0.1)) * 100, 0, 100);
+  const nextStep =
+    routeProgress <= 0.04 ? steps[0] : steps.find((step) => step.distanceKm > routeProgress + 0.04) || steps[steps.length - 1];
+  const isRecording = runSession.status === 'recording';
+  const isPaused = runSession.status === 'paused';
+  const isFinished = runSession.status === 'finished';
+  const isIdle = runSession.status === 'idle';
+
+  return (
+    <section className="runModeShell" aria-label="Run mode">
+      <div className="runHero">
+        <div>
+          <span className="eyebrow">Live run mode</span>
+          <h1>Follow and record {route.name}</h1>
+          <p>Turn-by-turn route guidance plus Strava-style recording from browser GPS.</p>
+        </div>
+        <button className="secondaryButton" onClick={onBackToPlanner} type="button">
+          <Compass aria-hidden="true" size={17} />
+          Planner
+        </button>
+      </div>
+
+      <div className="runLayout">
+        <div className="runPrimary">
+          <RouteMap routes={[route]} selectedRouteId={route.id} onSelectRoute={() => {}} routing={false} track={runSession.track} />
+
+          <div className="runControls">
+            {isIdle || isFinished ? (
+              <button className="primaryButton" onClick={onStartRun} type="button">
+                <Play aria-hidden="true" size={18} />
+                Start recording
+              </button>
+            ) : null}
+            {isRecording ? (
+              <button className="secondaryButton" onClick={onPauseRun} type="button">
+                <Pause aria-hidden="true" size={18} />
+                Pause
+              </button>
+            ) : null}
+            {isPaused ? (
+              <button className="primaryButton" onClick={onResumeRun} type="button">
+                <Play aria-hidden="true" size={18} />
+                Resume
+              </button>
+            ) : null}
+            {!isIdle && !isFinished ? (
+              <button className="secondaryButton" onClick={onFinishRun} type="button">
+                <Square aria-hidden="true" size={17} />
+                Finish
+              </button>
+            ) : null}
+            {isFinished ? (
+              <button className="secondaryButton" onClick={onSaveActivity} type="button">
+                <Trophy aria-hidden="true" size={17} />
+                Save activity
+              </button>
+            ) : null}
+            {!isIdle ? (
+              <button className="textButton" onClick={onResetRun} type="button">
+                Reset
+              </button>
+            ) : null}
+          </div>
+
+          {runSession.error ? (
+            <div className="runAlert">
+              <AlertTriangle aria-hidden="true" size={18} />
+              <span>{runSession.error}</span>
+            </div>
+          ) : null}
+        </div>
+
+        <aside className="runDashboard">
+          <div className="recordingStatus">
+            <span className={`recordingDot ${runSession.status}`} />
+            <strong>{isRecording ? 'Recording' : isPaused ? 'Paused' : isFinished ? 'Finished' : 'Ready'}</strong>
+            <small>{runSession.track.length} GPS point{runSession.track.length === 1 ? '' : 's'}</small>
+          </div>
+
+          <div className="runStatsGrid">
+            <Stat icon={Timer} label="Time" value={formatClock(runSession.elapsedSeconds)} />
+            <Stat icon={Activity} label="Recorded" value={formatDistance(runSession.distanceKm)} />
+            <Stat icon={Route} label="Route" value={formatDistance(route.distanceKm)} />
+            <Stat icon={Flame} label="Avg pace" value={formatRunPace(runSession.distanceKm, runSession.elapsedSeconds)} />
+          </div>
+
+          <section className="nextInstruction">
+            <span className="eyebrow">Next direction</span>
+            <h2>{nextStep?.instruction || 'Start route'}</h2>
+            <p>{nextStep?.note || 'Start recording near the route start.'}</p>
+            <strong>{nextStep ? `${formatDistance(Math.max(nextStep.distanceKm - routeProgress, 0))} ahead` : ''}</strong>
+          </section>
+
+          <section className="routeProgress">
+            <div>
+              <span>Route progress</span>
+              <strong>{Math.round(progressPercent)}%</strong>
+            </div>
+            <div className="progressTrack" aria-hidden="true">
+              <span style={{ width: `${progressPercent}%` }} />
+            </div>
+            <small>
+              {formatDistance(routeProgress)} followed
+              {runSession.offRouteM !== null ? ` · ${runSession.offRouteM} m from route` : ''}
+            </small>
+          </section>
+
+          <section className="turnList">
+            <h3>Directions</h3>
+            {steps.slice(0, 10).map((step) => {
+              const completed = step.distanceKm <= routeProgress;
+              const current = step.id === nextStep?.id;
+              return (
+                <div className={`${completed ? 'completed' : ''} ${current ? 'current' : ''}`} key={step.id}>
+                  <span>{formatDistance(step.distanceKm)}</span>
+                  <strong>{step.instruction}</strong>
+                  <small>{step.note}</small>
+                </div>
+              );
+            })}
+          </section>
+
+          <section className="activityHistory">
+            <h3>Recorded activities</h3>
+            {savedActivities.length === 0 ? (
+              <p className="compactCopy">Finished runs will appear here with distance, time, and pace.</p>
+            ) : (
+              savedActivities.slice(0, 4).map((activity) => (
+                <div key={activity.id}>
+                  <strong>{activity.name}</strong>
+                  <span>
+                    {formatDistance(activity.distanceKm)} · {formatClock(activity.elapsedSeconds)} ·{' '}
+                    {formatRunPace(activity.distanceKm, activity.elapsedSeconds)}
+                  </span>
+                </div>
+              ))
+            )}
+          </section>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function createInitialRunSession() {
+  return {
+    status: 'idle',
+    elapsedSeconds: 0,
+    distanceKm: 0,
+    routeProgressKm: 0,
+    routeProgressPercent: 0,
+    offRouteM: null,
+    track: [],
+    startedAt: null,
+    finishedAt: null,
+    error: '',
+    savedActivityId: null
+  };
+}
+
 function App() {
   const initialForm = {
     start: DEFAULT_START,
@@ -1363,8 +1721,10 @@ function App() {
   const [routes, setRoutes] = useState(() => generateEstimatedRoutes(initialForm));
   const [selectedRouteId, setSelectedRouteId] = useState(routes[0].id);
   const [savedRoutes, setSavedRoutes] = useLocalStorageState('longrun.savedRoutes', []);
+  const [savedActivities, setSavedActivities] = useLocalStorageState('runroute.activities', []);
   const [darkMode, setDarkMode] = useLocalStorageState('runroute.darkMode', false);
   const [activeTab, setActiveTab] = useState('planner');
+  const [runSession, setRunSession] = useState(createInitialRunSession);
   const [locating, setLocating] = useState(false);
   const [routing, setRouting] = useState(false);
   const [agentPrompt, setAgentPrompt] = useState('');
@@ -1378,6 +1738,7 @@ function App() {
   const [toast, setToast] = useState('');
   const routeRequestRef = useRef(0);
   const initialRoutingRef = useRef(false);
+  const watchIdRef = useRef(null);
 
   const selectedRoute = useMemo(
     () => routes.find((route) => route.id === selectedRouteId) || routes[0],
@@ -1395,9 +1756,100 @@ function App() {
     document.title = 'RunRoute AI';
   }, []);
 
+  useEffect(() => {
+    if (runSession.status !== 'recording') return undefined;
+
+    const timerId = window.setInterval(() => {
+      setRunSession((current) =>
+        current.status === 'recording' ? { ...current, elapsedSeconds: current.elapsedSeconds + 1 } : current
+      );
+    }, 1000);
+
+    return () => window.clearInterval(timerId);
+  }, [runSession.status]);
+
+  useEffect(
+    () => () => {
+      if (watchIdRef.current !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    },
+    []
+  );
+
   const showToast = (message) => {
     setToast(message);
     window.setTimeout(() => setToast(''), 2200);
+  };
+
+  const clearLocationWatch = () => {
+    if (watchIdRef.current !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+  };
+
+  const beginLocationWatch = (routeForRun) => {
+    if (!navigator.geolocation) {
+      setRunSession((current) => ({
+        ...current,
+        status: current.track.length > 0 ? 'paused' : 'idle',
+        error: 'Location tracking is unavailable in this browser.'
+      }));
+      showToast('Location tracking unavailable');
+      return false;
+    }
+
+    clearLocationWatch();
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        const point = {
+          lat: round(position.coords.latitude, 6),
+          lng: round(position.coords.longitude, 6),
+          accuracy: Math.round(position.coords.accuracy || 0),
+          timestamp: new Date(position.timestamp || Date.now()).toISOString()
+        };
+        const progress = getRouteProgress(routeForRun, point);
+
+        setRunSession((current) => {
+          if (current.status !== 'recording') return current;
+
+          const previous = current.track[current.track.length - 1];
+          const addedDistance =
+            previous && (!point.accuracy || point.accuracy <= 80) ? haversineDistanceKm(previous, point) : 0;
+          const isOffRoute = progress.nearestDistanceM !== null && progress.nearestDistanceM > 90;
+
+          return {
+            ...current,
+            distanceKm: round(current.distanceKm + addedDistance, 3),
+            routeProgressKm: round(progress.progressKm, 2),
+            routeProgressPercent: progress.progressPercent,
+            offRouteM: progress.nearestDistanceM,
+            track: [...current.track, point],
+            error: isOffRoute ? 'You appear to be away from the selected route. Rejoin the highlighted line when safe.' : ''
+          };
+        });
+      },
+      (error) => {
+        const message =
+          error.code === error.PERMISSION_DENIED
+            ? 'Location permission was not granted. Allow location access to record the run.'
+            : error.code === error.TIMEOUT
+              ? 'Location tracking timed out. Try again outdoors or near a window.'
+              : 'Location is currently unavailable. Try again when GPS signal improves.';
+
+        clearLocationWatch();
+        setRunSession((current) => ({
+          ...current,
+          status: current.track.length > 0 ? 'paused' : 'idle',
+          error: message
+        }));
+        showToast(message);
+      },
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 12000 }
+    );
+
+    return true;
   };
 
   const handleFormChange = (updater) => {
@@ -1556,6 +2008,79 @@ function App() {
     }
   };
 
+  const startRun = () => {
+    setActiveTab('run');
+    setRunSession({
+      ...createInitialRunSession(),
+      status: 'recording',
+      startedAt: new Date().toISOString()
+    });
+    beginLocationWatch(selectedRoute);
+  };
+
+  const pauseRun = () => {
+    clearLocationWatch();
+    setRunSession((current) => ({
+      ...current,
+      status: current.status === 'recording' ? 'paused' : current.status
+    }));
+  };
+
+  const resumeRun = () => {
+    setRunSession((current) => ({
+      ...current,
+      status: 'recording',
+      error: ''
+    }));
+    beginLocationWatch(selectedRoute);
+  };
+
+  const finishRun = () => {
+    clearLocationWatch();
+    setRunSession((current) => ({
+      ...current,
+      status: 'finished',
+      finishedAt: new Date().toISOString()
+    }));
+    showToast('Run finished');
+  };
+
+  const resetRun = () => {
+    clearLocationWatch();
+    setRunSession(createInitialRunSession());
+  };
+
+  const saveActivity = () => {
+    if (runSession.status !== 'finished') {
+      showToast('Finish the run before saving activity');
+      return;
+    }
+
+    if (runSession.savedActivityId) {
+      showToast('Activity already saved');
+      return;
+    }
+
+    const activityDistance = round(Math.max(runSession.distanceKm, runSession.routeProgressKm || 0), 2);
+    const activity = {
+      id: `activity-${Date.now()}`,
+      routeId: selectedRoute.id,
+      routeName: selectedRoute.name,
+      name: `${selectedRoute.name} activity`,
+      distanceKm: activityDistance,
+      elapsedSeconds: runSession.elapsedSeconds,
+      pace: formatRunPace(activityDistance, runSession.elapsedSeconds),
+      startedAt: runSession.startedAt,
+      finishedAt: runSession.finishedAt,
+      savedAt: new Date().toISOString(),
+      track: runSession.track
+    };
+
+    setSavedActivities((current) => [activity, ...current]);
+    setRunSession((current) => ({ ...current, savedActivityId: activity.id }));
+    showToast('Activity saved locally');
+  };
+
   return (
     <main className={`appShell ${darkMode ? 'darkMode' : ''}`}>
       <div className="topNav" aria-label="Primary">
@@ -1566,6 +2091,10 @@ function App() {
         >
           <Compass aria-hidden="true" size={18} />
           Planner
+        </button>
+        <button className={activeTab === 'run' ? 'active' : ''} onClick={() => setActiveTab('run')} type="button">
+          <Activity aria-hidden="true" size={18} />
+          Run
         </button>
         <button
           className={activeTab === 'saved' ? 'active' : ''}
@@ -1637,9 +2166,23 @@ function App() {
               onExportGpx={() => exportSelected('gpx')}
               onExportKml={() => exportSelected('kml')}
               onShare={shareSelected}
+              onStartNavigation={startRun}
             />
           </div>
         </div>
+      ) : activeTab === 'run' ? (
+        <RunMode
+          route={selectedRoute}
+          runSession={runSession}
+          savedActivities={savedActivities}
+          onBackToPlanner={() => setActiveTab('planner')}
+          onFinishRun={finishRun}
+          onPauseRun={pauseRun}
+          onResetRun={resetRun}
+          onResumeRun={resumeRun}
+          onSaveActivity={saveActivity}
+          onStartRun={startRun}
+        />
       ) : (
         <SavedRoutes routes={savedRoutes} onSelect={openSavedRoute} onDelete={deleteSavedRoute} />
       )}
