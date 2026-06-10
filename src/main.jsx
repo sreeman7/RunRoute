@@ -41,6 +41,8 @@ import {
   Train,
   Trees,
   Trophy,
+  Volume2,
+  VolumeX,
   WandSparkles,
   Waves
 } from 'lucide-react';
@@ -197,6 +199,49 @@ function formatClock(totalSeconds) {
 function formatRunPace(distanceKm, elapsedSeconds) {
   if (!distanceKm || distanceKm < 0.01 || !elapsedSeconds) return '-- /km';
   return formatPace(elapsedSeconds / 60 / distanceKm);
+}
+
+function canUseVoiceDirections() {
+  return typeof window !== 'undefined' && 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+}
+
+function formatVoiceDistance(distanceKm) {
+  if (distanceKm <= 0.04) return 'now';
+  if (distanceKm < 1) {
+    const meters = Math.max(20, Math.round((distanceKm * 1000) / 10) * 10);
+    return `in ${meters} meters`;
+  }
+  return `in ${round(distanceKm, 1)} kilometers`;
+}
+
+function buildSpokenInstruction(step, distanceAheadKm) {
+  if (!step) return '';
+  if (step.id === 'start') return `${step.instruction}. Begin recording and follow the highlighted route.`;
+  if (step.id === 'finish') return `Finish ${formatVoiceDistance(distanceAheadKm)}. Great work.`;
+  return `${step.instruction} ${formatVoiceDistance(distanceAheadKm)}.`;
+}
+
+function speakDirections(text, options = {}) {
+  if (!text || !canUseVoiceDirections()) return false;
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'en-US';
+  utterance.rate = 0.95;
+  utterance.pitch = 1;
+  utterance.volume = 1;
+
+  if (options.interrupt !== false) {
+    window.speechSynthesis.cancel();
+  }
+
+  window.speechSynthesis.speak(utterance);
+  return true;
+}
+
+function getNextRunStep(steps, routeProgressKm) {
+  if (!steps.length) return null;
+  if (routeProgressKm <= 0.04) return steps[0];
+  return steps.find((step) => step.distanceKm > routeProgressKm + 0.04) || steps[steps.length - 1];
 }
 
 function buildNavigationSteps(route) {
@@ -1535,20 +1580,22 @@ function RunMode({
   route,
   runSession,
   savedActivities,
+  voiceAvailable,
+  voiceDirections,
   onBackToPlanner,
   onFinishRun,
   onPauseRun,
   onResetRun,
   onResumeRun,
   onSaveActivity,
-  onStartRun
+  onStartRun,
+  onToggleVoice
 }) {
   const steps = useMemo(() => buildNavigationSteps(route), [route]);
   const routeProgress = runSession.routeProgressKm || 0;
   const completedDistance = Math.max(routeProgress, runSession.distanceKm || 0);
   const progressPercent = clamp((completedDistance / Math.max(route.distanceKm, 0.1)) * 100, 0, 100);
-  const nextStep =
-    routeProgress <= 0.04 ? steps[0] : steps.find((step) => step.distanceKm > routeProgress + 0.04) || steps[steps.length - 1];
+  const nextStep = getNextRunStep(steps, routeProgress);
   const isRecording = runSession.status === 'recording';
   const isPaused = runSession.status === 'paused';
   const isFinished = runSession.status === 'finished';
@@ -1560,7 +1607,7 @@ function RunMode({
         <div>
           <span className="eyebrow">Live run mode</span>
           <h1>Follow and record {route.name}</h1>
-          <p>Turn-by-turn route guidance plus Strava-style recording from browser GPS.</p>
+          <p>Turn-by-turn route guidance, voice prompts, and Strava-style recording from browser GPS.</p>
         </div>
         <button className="secondaryButton" onClick={onBackToPlanner} type="button">
           <Compass aria-hidden="true" size={17} />
@@ -1579,6 +1626,16 @@ function RunMode({
                 Start recording
               </button>
             ) : null}
+            <button
+              className={`secondaryButton voiceButton ${voiceDirections ? 'active' : ''}`}
+              disabled={!voiceAvailable}
+              onClick={onToggleVoice}
+              title={voiceAvailable ? 'Toggle voice directions' : 'Voice directions unavailable in this browser'}
+              type="button"
+            >
+              {voiceDirections ? <Volume2 aria-hidden="true" size={18} /> : <VolumeX aria-hidden="true" size={18} />}
+              Voice {voiceDirections ? 'on' : 'off'}
+            </button>
             {isRecording ? (
               <button className="secondaryButton" onClick={onPauseRun} type="button">
                 <Pause aria-hidden="true" size={18} />
@@ -1622,7 +1679,10 @@ function RunMode({
           <div className="recordingStatus">
             <span className={`recordingDot ${runSession.status}`} />
             <strong>{isRecording ? 'Recording' : isPaused ? 'Paused' : isFinished ? 'Finished' : 'Ready'}</strong>
-            <small>{runSession.track.length} GPS point{runSession.track.length === 1 ? '' : 's'}</small>
+            <small>
+              {runSession.track.length} GPS point{runSession.track.length === 1 ? '' : 's'} · Voice{' '}
+              {voiceDirections ? 'on' : 'off'}
+            </small>
           </div>
 
           <div className="runStatsGrid">
@@ -1723,6 +1783,7 @@ function App() {
   const [savedRoutes, setSavedRoutes] = useLocalStorageState('longrun.savedRoutes', []);
   const [savedActivities, setSavedActivities] = useLocalStorageState('runroute.activities', []);
   const [darkMode, setDarkMode] = useLocalStorageState('runroute.darkMode', false);
+  const [voiceDirections, setVoiceDirections] = useLocalStorageState('runroute.voiceDirections', false);
   const [activeTab, setActiveTab] = useState('planner');
   const [runSession, setRunSession] = useState(createInitialRunSession);
   const [locating, setLocating] = useState(false);
@@ -1739,6 +1800,8 @@ function App() {
   const routeRequestRef = useRef(0);
   const initialRoutingRef = useRef(false);
   const watchIdRef = useRef(null);
+  const lastSpokenStepRef = useRef('');
+  const lastSpokenWarningRef = useRef('');
 
   const selectedRoute = useMemo(
     () => routes.find((route) => route.id === selectedRouteId) || routes[0],
@@ -1751,10 +1814,52 @@ function App() {
     () => analyzeRoutes(routes, selectedRoute, form, runnerMemory),
     [form, routes, runnerMemory, selectedRoute]
   );
+  const runSteps = useMemo(() => buildNavigationSteps(selectedRoute), [selectedRoute]);
+  const currentVoiceStep = useMemo(
+    () => getNextRunStep(runSteps, runSession.routeProgressKm || 0),
+    [runSession.routeProgressKm, runSteps]
+  );
+  const voiceAvailable = canUseVoiceDirections();
 
   useEffect(() => {
     document.title = 'RunRoute AI';
   }, []);
+
+  useEffect(() => {
+    lastSpokenStepRef.current = '';
+    lastSpokenWarningRef.current = '';
+  }, [runSession.startedAt, selectedRoute.id]);
+
+  useEffect(() => {
+    if (!voiceDirections || runSession.status !== 'recording' || !currentVoiceStep) return;
+
+    const routeProgress = runSession.routeProgressKm || 0;
+    const distanceAhead = Math.max(currentVoiceStep.distanceKm - routeProgress, 0);
+    const shouldSpeak =
+      currentVoiceStep.id === 'start' || currentVoiceStep.id === 'finish' || distanceAhead <= 0.45;
+
+    if (!shouldSpeak) return;
+
+    const stepKey = `${selectedRoute.id}-${currentVoiceStep.id}`;
+    if (lastSpokenStepRef.current === stepKey) return;
+
+    if (speakDirections(buildSpokenInstruction(currentVoiceStep, distanceAhead))) {
+      lastSpokenStepRef.current = stepKey;
+    }
+  }, [currentVoiceStep, runSession.routeProgressKm, runSession.status, selectedRoute.id, voiceDirections]);
+
+  useEffect(() => {
+    if (!voiceDirections || runSession.status !== 'recording' || !runSession.error.includes('away from the selected route')) {
+      return;
+    }
+
+    const warningKey = `${selectedRoute.id}-${Math.floor((runSession.routeProgressKm || 0) * 10)}`;
+    if (lastSpokenWarningRef.current === warningKey) return;
+
+    if (speakDirections('You seem to be off route. Rejoin the highlighted line when safe.')) {
+      lastSpokenWarningRef.current = warningKey;
+    }
+  }, [runSession.error, runSession.routeProgressKm, runSession.status, selectedRoute.id, voiceDirections]);
 
   useEffect(() => {
     if (runSession.status !== 'recording') return undefined;
@@ -1772,6 +1877,9 @@ function App() {
     () => () => {
       if (watchIdRef.current !== null && navigator.geolocation) {
         navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+      if (canUseVoiceDirections()) {
+        window.speechSynthesis.cancel();
       }
     },
     []
@@ -2008,6 +2116,38 @@ function App() {
     }
   };
 
+  const toggleVoiceDirections = () => {
+    if (voiceDirections) {
+      setVoiceDirections(false);
+      if (canUseVoiceDirections()) window.speechSynthesis.cancel();
+      lastSpokenStepRef.current = '';
+      lastSpokenWarningRef.current = '';
+      showToast('Voice directions off');
+      return;
+    }
+
+    if (!canUseVoiceDirections()) {
+      showToast('Voice directions are unavailable in this browser');
+      return;
+    }
+
+    setVoiceDirections(true);
+    lastSpokenStepRef.current = '';
+    lastSpokenWarningRef.current = '';
+
+    if (runSession.status === 'recording' && currentVoiceStep) {
+      const distanceAhead = Math.max(currentVoiceStep.distanceKm - (runSession.routeProgressKm || 0), 0);
+      const stepKey = `${selectedRoute.id}-${currentVoiceStep.id}`;
+      if (speakDirections(`Voice directions on. ${buildSpokenInstruction(currentVoiceStep, distanceAhead)}`)) {
+        lastSpokenStepRef.current = stepKey;
+      }
+    } else {
+      speakDirections('Voice directions on. Start recording to hear navigation prompts.');
+    }
+
+    showToast('Voice directions on');
+  };
+
   const startRun = () => {
     setActiveTab('run');
     setRunSession({
@@ -2015,6 +2155,11 @@ function App() {
       status: 'recording',
       startedAt: new Date().toISOString()
     });
+    lastSpokenStepRef.current = '';
+    lastSpokenWarningRef.current = '';
+    if (voiceDirections && speakDirections(`Starting ${selectedRoute.name}. Follow the highlighted route.`)) {
+      lastSpokenStepRef.current = `${selectedRoute.id}-start`;
+    }
     beginLocationWatch(selectedRoute);
   };
 
@@ -2024,6 +2169,7 @@ function App() {
       ...current,
       status: current.status === 'recording' ? 'paused' : current.status
     }));
+    if (voiceDirections) speakDirections('Run paused.');
   };
 
   const resumeRun = () => {
@@ -2032,6 +2178,8 @@ function App() {
       status: 'recording',
       error: ''
     }));
+    lastSpokenWarningRef.current = '';
+    if (voiceDirections) speakDirections('Run resumed.');
     beginLocationWatch(selectedRoute);
   };
 
@@ -2042,11 +2190,15 @@ function App() {
       status: 'finished',
       finishedAt: new Date().toISOString()
     }));
+    if (voiceDirections) speakDirections('Run finished. Nice work.');
     showToast('Run finished');
   };
 
   const resetRun = () => {
     clearLocationWatch();
+    if (canUseVoiceDirections()) window.speechSynthesis.cancel();
+    lastSpokenStepRef.current = '';
+    lastSpokenWarningRef.current = '';
     setRunSession(createInitialRunSession());
   };
 
@@ -2175,6 +2327,8 @@ function App() {
           route={selectedRoute}
           runSession={runSession}
           savedActivities={savedActivities}
+          voiceAvailable={voiceAvailable}
+          voiceDirections={voiceDirections}
           onBackToPlanner={() => setActiveTab('planner')}
           onFinishRun={finishRun}
           onPauseRun={pauseRun}
@@ -2182,6 +2336,7 @@ function App() {
           onResumeRun={resumeRun}
           onSaveActivity={saveActivity}
           onStartRun={startRun}
+          onToggleVoice={toggleVoiceDirections}
         />
       ) : (
         <SavedRoutes routes={savedRoutes} onSelect={openSavedRoute} onDelete={deleteSavedRoute} />

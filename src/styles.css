@@ -1291,6 +1291,17 @@ select {
   min-width: 96px;
 }
 
+.voiceButton.active {
+  color: #ffffff;
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+.voiceButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .runAlert {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
