@@ -18,6 +18,8 @@
   --orange: #e76f51;
   --amber: #f0a84c;
   --red: #bf3f4a;
+  --cyan: #1bd8ff;
+  --purple: #8b5cf6;
   --shadow: 0 18px 48px rgba(33, 52, 42, 0.12);
 }
 
@@ -164,6 +166,13 @@ select:focus-visible {
 
 .brandBlock {
   gap: 12px;
+}
+
+.tagline {
+  max-width: 260px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.35;
 }
 
 .logoMark {
@@ -635,6 +644,16 @@ select {
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: 0 12px 32px rgba(33, 52, 42, 0.08);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.routeCard:hover {
+  transform: translateY(-2px);
+  border-color: rgba(27, 216, 255, 0.42);
+  box-shadow: 0 18px 42px rgba(31, 122, 90, 0.14);
 }
 
 .routeCard.selected {
@@ -839,6 +858,164 @@ select {
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: var(--shadow);
+}
+
+.geminiPanel {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  overflow: hidden;
+  color: var(--ink);
+  background:
+    linear-gradient(135deg, rgba(27, 216, 255, 0.14), rgba(139, 92, 246, 0.16)),
+    rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(27, 216, 255, 0.28);
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(27, 40, 52, 0.16);
+  backdrop-filter: blur(18px);
+}
+
+.darkMode .geminiPanel {
+  background:
+    linear-gradient(135deg, rgba(27, 216, 255, 0.16), rgba(139, 92, 246, 0.18)),
+    rgba(14, 22, 29, 0.9);
+  border-color: rgba(27, 216, 255, 0.34);
+}
+
+.geminiHeader {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.geminiIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: #061016;
+  background: var(--cyan);
+  border-radius: 8px;
+  box-shadow: 0 0 24px rgba(27, 216, 255, 0.34);
+}
+
+.sourcePill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 9px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.64);
+  border: 1px solid rgba(139, 92, 246, 0.24);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.sourcePill.live {
+  color: #061016;
+  background: var(--cyan);
+  border-color: var(--cyan);
+}
+
+.confidenceRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.56);
+  border: 1px solid rgba(27, 216, 255, 0.22);
+  border-radius: 8px;
+}
+
+.darkMode .confidenceRow,
+.darkMode .sourcePill {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.confidenceRow span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.confidenceRow strong {
+  color: var(--purple);
+  font-size: 1.18rem;
+}
+
+.insightBadges {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.insightBadges span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.darkMode .insightBadges span {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.geminiInsight {
+  display: grid;
+  gap: 6px;
+}
+
+.geminiInsight p,
+.aiWarning,
+.nextRunPlan {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.aiWarning {
+  padding: 10px 12px;
+  color: #61430b;
+  background: rgba(240, 168, 76, 0.2);
+  border: 1px solid rgba(240, 168, 76, 0.38);
+  border-radius: 8px;
+}
+
+.darkMode .aiWarning {
+  color: #ffd166;
+}
+
+.nextRunPlan {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 8px;
+  padding: 11px 12px;
+  background: rgba(27, 216, 255, 0.12);
+  border: 1px solid rgba(27, 216, 255, 0.28);
+  border-radius: 8px;
+}
+
+.nextRunPlan svg {
+  color: var(--purple);
+}
+
+.geminiActions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
 }
 
 .darkMode .aiPanel,

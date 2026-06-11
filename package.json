@@ -1,10 +1,11 @@
 {
-  "name": "longrun-route-planner",
+  "name": "runroute-ai",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "dev:server": "npm --prefix server run dev",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1"
   },

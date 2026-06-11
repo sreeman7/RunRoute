@@ -56,6 +56,8 @@ const ROUTE_COLORS = ['#1f7a5a', '#e76f51', '#2f65d7'];
 const MIN_DISTANCE_KM = 1;
 const MAX_DISTANCE_KM = 60;
 const OSRM_ROUTE_URL = 'https://router.project-osrm.org/route/v1/foot';
+const AI_API_BASE_URL = import.meta.env.VITE_AI_API_BASE_URL || 'http://127.0.0.1:8787';
+const RUNROUTE_USER_ID = 'demo-runner';
 
 const ROUTE_TYPES = [
   { id: 'loop', label: 'Loop' },
@@ -491,7 +493,7 @@ function trainingRecommendation(goal, style, distanceKm) {
 function createRoute(form, index, desiredDistanceKm, coordinates, source = 'estimated', sourceDistanceKm) {
   const target = Number(form.distanceKm);
   const start = form.start || DEFAULT_START;
-  const routeNames = ['Safest Corridor', 'Scenic Flow', 'Flat Finish'];
+  const routeNames = ['Alpha', 'Pulse', 'Horizon'];
   const name = routeNames[index];
   const actualDistance = sourceDistanceKm || routeDistanceKm(coordinates) || desiredDistanceKm;
   const distance = round(actualDistance, distancePrecision(actualDistance));
@@ -647,6 +649,10 @@ async function snapRouteToRoads(form, index) {
     }
 
     if (foundCloseMatch) break;
+  }
+
+  if (!bestRoute?.coordinates?.length) {
+    throw new Error('No street/path route match found');
   }
 
   return createRoute(form, index, desiredDistance, bestRoute.coordinates, 'road', bestRoute.distanceKm);
@@ -831,6 +837,102 @@ function analyzeRoutes(routes, selectedRoute, form, memory) {
       : 'After one saved route, the agent can personalize distance, terrain, and difficulty.',
     mongodb: 'MongoDB Atlas/MCP-ready memory surface: profile, route history, preferences, and AI notes can map directly to collections.'
   };
+}
+
+function buildAiRequestPayload(routes, form) {
+  return {
+    routes: routes.map((route) => ({
+      id: route.id,
+      name: route.name,
+      label: route.label,
+      description: route.description,
+      distanceKm: route.distanceKm,
+      routeType: route.routeType,
+      style: route.style,
+      safetyScore: route.safetyScore,
+      difficultyScore: route.difficultyScore,
+      hydrationScore: route.hydrationScore,
+      scenicScore: route.scenicScore,
+      modeFit: route.modeFit,
+      elevationGain: route.elevationGain,
+      stops: route.stops
+    })),
+    distance: Number(form.distanceKm),
+    pace: formatPace(Number(form.paceMinPerKm)),
+    trainingGoal: form.trainingGoal,
+    routeStyle: form.style
+  };
+}
+
+function routeMemoryRecord(route) {
+  return {
+    id: route.id,
+    name: route.name,
+    label: route.label,
+    description: route.description,
+    distanceKm: route.distanceKm,
+    routeType: route.routeType,
+    style: route.style,
+    safetyScore: route.safetyScore,
+    difficultyScore: route.difficultyScore,
+    hydrationScore: route.hydrationScore,
+    scenicScore: route.scenicScore,
+    modeFit: route.modeFit,
+    elevationGain: route.elevationGain,
+    stops: route.stops,
+    nutrition: route.nutrition,
+    source: route.source
+  };
+}
+
+function preferencePayload(form) {
+  return {
+    routeStyle: form.style,
+    routeType: form.routeType,
+    trainingGoal: form.trainingGoal,
+    pace: formatPace(Number(form.paceMinPerKm)),
+    distance: Number(form.distanceKm)
+  };
+}
+
+async function postAiBackend(path, payload) {
+  try {
+    const response = await fetch(`${AI_API_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) return null;
+    return response.json();
+  } catch {
+    return null;
+  }
+}
+
+function localGeminiShape(analysis) {
+  const route = analysis.bestRoute || {};
+  return {
+    bestRouteId: route.id || '',
+    bestRouteName: route.name || 'Best route',
+    confidence: route.modeFit || route.safetyScore || 82,
+    whyThisRoute: analysis.recommendation,
+    safetyAnalysis: analysis.safety[0],
+    difficultyAnalysis: analysis.reasoning.find((reason) => reason.startsWith('Training load')) || analysis.reasoning[0],
+    hydrationAdvice: analysis.weather[0],
+    trainingRecommendation: analysis.adaptive || analysis.recommendation
+  };
+}
+
+function buildNextRunPlan(memory) {
+  if (!memory.lastRoute) {
+    return 'Save a completed or planned route first, then I can adapt the next long run from your history.';
+  }
+
+  const nextDistance = round(clamp(Number(memory.lastRoute.distanceKm || memory.averageDistance || 20) + 2, 1, 60), 1);
+  return `Based on your last ${formatDistance(memory.lastRoute.distanceKm)} run, your next long run should be ${formatDistance(
+    nextDistance
+  )} with lower elevation and more hydration stops.`;
 }
 
 function applyAgentPromptToForm(prompt, form) {
@@ -1167,7 +1269,8 @@ function PlannerForm({ form, setForm, onGenerate, onUseLocation, locating, routi
         </span>
         <div>
           <p className="eyebrow">RunRoute AI</p>
-          <h1>AI running agent</h1>
+          <h1>RunRoute AI</h1>
+          <p className="tagline">An adaptive AI navigation agent for endurance runners.</p>
         </div>
       </div>
 
@@ -1292,6 +1395,83 @@ function PlannerForm({ form, setForm, onGenerate, onUseLocation, locating, routi
         {routing ? 'Snapping routes...' : 'Generate 3 routes'}
       </button>
     </section>
+  );
+}
+
+function GeminiRecommendationPanel({ analysis, loading, error, source, nextRunPlan, onPlanNextRun, onRefresh }) {
+  return (
+    <aside className="geminiPanel" aria-label="RunRoute AI recommendation">
+      <div className="geminiHeader">
+        <span className="geminiIcon">
+          <Sparkles aria-hidden="true" size={21} />
+        </span>
+        <div>
+          <span className="eyebrow">RunRoute AI Recommendation</span>
+          <h2>{loading ? 'Analyzing route options' : analysis.bestRouteName}</h2>
+        </div>
+        <span className={`sourcePill ${source === 'gemini' ? 'live' : ''}`}>{source === 'gemini' ? 'Gemini' : 'Local'}</span>
+      </div>
+
+      <div className="confidenceRow">
+        <span>AI confidence</span>
+        <strong>{Math.round(analysis.confidence)}%</strong>
+      </div>
+
+      <div className="insightBadges">
+        <span>
+          <ShieldCheck aria-hidden="true" size={15} />
+          Safety
+        </span>
+        <span>
+          <Activity aria-hidden="true" size={15} />
+          Training
+        </span>
+        <span>
+          <Droplets aria-hidden="true" size={15} />
+          Hydration
+        </span>
+      </div>
+
+      <section className="geminiInsight">
+        <h3>Why this route</h3>
+        <p>{analysis.whyThisRoute}</p>
+      </section>
+
+      <section className="geminiInsight">
+        <h3>Safety note</h3>
+        <p>{analysis.safetyAnalysis}</p>
+      </section>
+
+      <section className="geminiInsight">
+        <h3>Training note</h3>
+        <p>{analysis.trainingRecommendation}</p>
+      </section>
+
+      <section className="geminiInsight">
+        <h3>Hydration</h3>
+        <p>{analysis.hydrationAdvice}</p>
+      </section>
+
+      {error ? <p className="aiWarning">{error}</p> : null}
+
+      {nextRunPlan ? (
+        <div className="nextRunPlan">
+          <Trophy aria-hidden="true" size={18} />
+          <span>{nextRunPlan}</span>
+        </div>
+      ) : null}
+
+      <div className="geminiActions">
+        <button className="secondaryButton" disabled={loading} onClick={onRefresh} type="button">
+          <RefreshCcw aria-hidden="true" size={16} />
+          Refresh AI
+        </button>
+        <button className="primaryButton" onClick={onPlanNextRun} type="button">
+          <Brain aria-hidden="true" size={16} />
+          Plan My Next Run
+        </button>
+      </div>
+    </aside>
   );
 }
 
@@ -1799,6 +1979,11 @@ function App() {
   const [darkMode, setDarkMode] = useLocalStorageState('runroute.darkMode', false);
   const [voiceDirections, setVoiceDirections] = useLocalStorageState('runroute.voiceDirections', false);
   const [activeTab, setActiveTab] = useState('planner');
+  const [aiRecommendation, setAiRecommendation] = useState(null);
+  const [aiSource, setAiSource] = useState('local');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [nextRunPlan, setNextRunPlan] = useState('');
   const [runSession, setRunSession] = useState(createInitialRunSession);
   const [locating, setLocating] = useState(false);
   const [routing, setRouting] = useState(false);
@@ -1812,6 +1997,7 @@ function App() {
   ]);
   const [toast, setToast] = useState('');
   const routeRequestRef = useRef(0);
+  const aiRequestRef = useRef(0);
   const initialRoutingRef = useRef(false);
   const watchIdRef = useRef(null);
   const lastSpokenStepRef = useRef('');
@@ -1828,6 +2014,10 @@ function App() {
     () => analyzeRoutes(routes, selectedRoute, form, runnerMemory),
     [form, routes, runnerMemory, selectedRoute]
   );
+  const displayedAiRecommendation = useMemo(
+    () => aiRecommendation || localGeminiShape(agentAnalysis),
+    [agentAnalysis, aiRecommendation]
+  );
   const runSteps = useMemo(() => buildNavigationSteps(selectedRoute), [selectedRoute]);
   const currentVoiceStep = useMemo(
     () => getNextRunStep(runSteps, runSession.routeProgressKm || 0),
@@ -1835,9 +2025,46 @@ function App() {
   );
   const voiceAvailable = canUseVoiceDirections();
 
+  const requestAiRecommendation = async (routesForAi = routes, formForAi = form) => {
+    const requestId = aiRequestRef.current + 1;
+    aiRequestRef.current = requestId;
+    setAiLoading(true);
+    setAiError('');
+    setAiRecommendation(localGeminiShape(analyzeRoutes(routesForAi, routesForAi[0], formForAi, runnerMemory)));
+    setAiSource('local');
+
+    try {
+      const response = await fetch(`${AI_API_BASE_URL}/api/analyze-routes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildAiRequestPayload(routesForAi, formForAi))
+      });
+
+      if (!response.ok) throw new Error('AI backend did not accept the route payload');
+
+      const data = await response.json();
+      if (aiRequestRef.current !== requestId) return;
+
+      setAiRecommendation(data.analysis);
+      setAiSource(data.source || 'gemini');
+      setAiError(data.warning ? `Gemini fallback: ${data.warning}` : '');
+    } catch {
+      if (aiRequestRef.current !== requestId) return;
+      setAiSource('local');
+      setAiError('Gemini backend offline. Showing local recommendation until the server is running.');
+    } finally {
+      if (aiRequestRef.current === requestId) setAiLoading(false);
+    }
+  };
+
   useEffect(() => {
     document.title = 'RunRoute AI';
   }, []);
+
+  useEffect(() => {
+    if (routes.length === 0) return;
+    void requestAiRecommendation(routes, form);
+  }, [form.distanceKm, form.paceMinPerKm, form.routeType, form.style, form.trainingGoal, routes]);
 
   useEffect(() => {
     if (voiceDirections && !voiceAvailable) {
@@ -1915,6 +2142,20 @@ function App() {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
+  };
+
+  const persistGeneratedRoutes = (routesForMemory, formForMemory, source) => {
+    void postAiBackend('/api/routes/generated', {
+      userId: RUNROUTE_USER_ID,
+      routes: routesForMemory.map(routeMemoryRecord),
+      preferences: preferencePayload(formForMemory),
+      trainingGoal: formForMemory.trainingGoal,
+      previousPaceDistance: {
+        pace: formatPace(Number(formForMemory.paceMinPerKm)),
+        distance: Number(formForMemory.distanceKm)
+      },
+      source
+    });
   };
 
   const beginLocationWatch = (routeForRun) => {
@@ -2009,9 +2250,11 @@ function App() {
       );
       setRoutes(accurateRoutes);
       setSelectedRouteId(accurateRoutes[0].id);
+      persistGeneratedRoutes(accurateRoutes, normalizedForm, 'road');
       if (!options.silent) showToast('Best accurate street/path matches applied');
     } catch {
       if (routeRequestRef.current !== requestId) return;
+      persistGeneratedRoutes(estimatedRoutes, normalizedForm, 'estimated');
       if (!options.silent) showToast('Routing service unavailable; showing estimated preview');
     } finally {
       if (routeRequestRef.current === requestId) setRouting(false);
@@ -2100,6 +2343,16 @@ function App() {
         text: `Saved ${route.name}. I will use this as memory for future ${modeLabel(form.agentMode).toLowerCase()} recommendations.`
       }
     ]);
+    void postAiBackend('/api/routes/save', {
+      userId: RUNROUTE_USER_ID,
+      route: routeMemoryRecord(route),
+      preferences: preferencePayload(form),
+      trainingGoal: form.trainingGoal,
+      previousPaceDistance: {
+        pace: formatPace(Number(form.paceMinPerKm)),
+        distance: Number(form.distanceKm)
+      }
+    });
     showToast('Route saved');
   };
 
@@ -2253,6 +2506,25 @@ function App() {
     showToast('Activity saved locally');
   };
 
+  const planNextRun = async () => {
+    const localPlan = buildNextRunPlan(runnerMemory);
+    setNextRunPlan(localPlan);
+    showToast('Adaptive plan generated');
+
+    const memoryPlan = await postAiBackend('/api/agent/next-run', {
+      userId: RUNROUTE_USER_ID,
+      routeStyle: form.style,
+      trainingGoal: form.trainingGoal,
+      distance: Number(form.distanceKm),
+      pace: formatPace(Number(form.paceMinPerKm))
+    });
+
+    if (memoryPlan?.plan && (memoryPlan.savedRouteCount > 0 || !runnerMemory.lastRoute)) {
+      setNextRunPlan(memoryPlan.plan);
+      showToast(memoryPlan.source === 'mongodb' ? 'MongoDB memory plan generated' : 'Adaptive plan generated');
+    }
+  };
+
   return (
     <main className={`appShell ${darkMode ? 'darkMode' : ''}`}>
       <div className="topNav" aria-label="Primary">
@@ -2322,6 +2594,15 @@ function App() {
             </div>
           </div>
           <div className="rightColumn">
+            <GeminiRecommendationPanel
+              analysis={displayedAiRecommendation}
+              loading={aiLoading}
+              error={aiError}
+              source={aiSource}
+              nextRunPlan={nextRunPlan}
+              onPlanNextRun={planNextRun}
+              onRefresh={() => requestAiRecommendation(routes, form)}
+            />
             <AIAssistantPanel
               analysis={agentAnalysis}
               agentMessages={agentMessages}
