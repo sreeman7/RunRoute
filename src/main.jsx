@@ -21,7 +21,6 @@ import {
   Footprints,
   LocateFixed,
   MapPin,
-  MessageCircle,
   Moon,
   Mountain,
   Navigation,
@@ -43,7 +42,6 @@ import {
   Trophy,
   Volume2,
   VolumeX,
-  WandSparkles,
   Waves
 } from 'lucide-react';
 import './styles.css';
@@ -115,6 +113,8 @@ const STOP_SYMBOLS = {
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
+
+function noop() {}
 
 function round(value, places = 1) {
   return Number((value + Number.EPSILON).toFixed(places));
@@ -356,8 +356,9 @@ function formatDuration(distanceKm, paceMinPerKm) {
 }
 
 function formatPace(decimalPace) {
-  const minutes = Math.floor(decimalPace);
-  const seconds = Math.round((decimalPace - minutes) * 60);
+  const totalSeconds = Math.round(decimalPace * 60);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, '0')} /km`;
 }
 
@@ -409,25 +410,37 @@ function buildCoordinates(start, targetKm, routeType, style, index, scale = 1) {
 }
 
 function estimatedScaleCandidates(targetKm, routeType) {
-  if (targetKm < 3) return [0.05, 0.08, 0.12, 0.16, 0.2, 0.25, 0.32, 0.42, 0.55, 0.7, 0.9, 1.12];
+  if (targetKm < 3) return [0.05, 0.08, 0.12, 0.16, 0.2, 0.25, 0.32, 0.42, 0.55, 0.7, 0.9, 1.12, 1.25, 1.4, 1.6];
   if (routeType === 'one-way') return [0.55, 0.66, 0.78, 0.9, 1, 1.12, 1.28, 1.45, 1.65];
   if (routeType === 'out-and-back') return [0.45, 0.55, 0.66, 0.75, 0.84, 0.94, 1, 1.12, 1.28];
   return [0.45, 0.55, 0.62, 0.7, 0.78, 0.8, 0.82, 0.86, 0.94, 1, 1.08, 1.2, 1.35];
 }
 
 function buildDistanceMatchedCoordinates(start, desiredDistance, routeType, style, index) {
-  let bestCoordinates = buildCoordinates(start, desiredDistance, routeType, style, index);
-  let bestGap = Math.abs(routeDistanceKm(bestCoordinates) - desiredDistance);
-
-  estimatedScaleCandidates(desiredDistance, routeType).forEach((scale) => {
+  let bestCoordinates = null;
+  let bestGap = Number.POSITIVE_INFINITY;
+  let bestScale = 1;
+  const evaluateScale = (scale) => {
     const coordinates = buildCoordinates(start, desiredDistance, routeType, style, index, scale);
-    const gap = Math.abs(routeDistanceKm(coordinates) - desiredDistance);
+    const distance = routeDistanceKm(coordinates);
+    const gap = Math.abs(distance - desiredDistance);
 
     if (gap < bestGap) {
       bestCoordinates = coordinates;
       bestGap = gap;
+      bestScale = scale;
     }
-  });
+    return distance;
+  };
+
+  evaluateScale(1);
+  estimatedScaleCandidates(desiredDistance, routeType).forEach(evaluateScale);
+
+  const bestDistance = routeDistanceKm(bestCoordinates);
+  if (bestDistance > 0) {
+    const correctionScale = clamp(bestScale * (desiredDistance / bestDistance), 0.04, 2.2);
+    evaluateScale(correctionScale);
+  }
 
   return bestCoordinates;
 }
@@ -1054,7 +1067,7 @@ function RouteMap({ routes, selectedRouteId, onSelectRoute, routing, track = [] 
         padding: [28, 28]
       });
     }
-  }, [onSelectRoute, routes, selectedRoute, selectedRouteId, track]);
+  }, [routes, selectedRoute, selectedRouteId, track]);
 
   return (
     <section className="mapPanel" aria-label="Route map">
@@ -1592,6 +1605,7 @@ function RunMode({
   onToggleVoice
 }) {
   const steps = useMemo(() => buildNavigationSteps(route), [route]);
+  const runMapRoutes = useMemo(() => [route], [route]);
   const routeProgress = runSession.routeProgressKm || 0;
   const completedDistance = Math.max(routeProgress, runSession.distanceKm || 0);
   const progressPercent = clamp((completedDistance / Math.max(route.distanceKm, 0.1)) * 100, 0, 100);
@@ -1617,7 +1631,7 @@ function RunMode({
 
       <div className="runLayout">
         <div className="runPrimary">
-          <RouteMap routes={[route]} selectedRouteId={route.id} onSelectRoute={() => {}} routing={false} track={runSession.track} />
+          <RouteMap routes={runMapRoutes} selectedRouteId={route.id} onSelectRoute={noop} routing={false} track={runSession.track} />
 
           <div className="runControls">
             {isIdle || isFinished ? (
@@ -1826,6 +1840,12 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (voiceDirections && !voiceAvailable) {
+      setVoiceDirections(false);
+    }
+  }, [setVoiceDirections, voiceAvailable, voiceDirections]);
+
+  useEffect(() => {
     lastSpokenStepRef.current = '';
     lastSpokenWarningRef.current = '';
   }, [runSession.startedAt, selectedRoute.id]);
@@ -1984,9 +2004,12 @@ function App() {
     try {
       const roadRoutes = await generateRoadSnappedRoutes(normalizedForm);
       if (routeRequestRef.current !== requestId) return;
-      setRoutes(roadRoutes);
-      setSelectedRouteId(roadRoutes[0].id);
-      if (!options.silent) showToast('Routes now follow streets and paths');
+      const accurateRoutes = roadRoutes.map((route, index) =>
+        route.distanceStatus === 'Within target range' ? route : estimatedRoutes[index]
+      );
+      setRoutes(accurateRoutes);
+      setSelectedRouteId(accurateRoutes[0].id);
+      if (!options.silent) showToast('Best accurate street/path matches applied');
     } catch {
       if (routeRequestRef.current !== requestId) return;
       if (!options.silent) showToast('Routing service unavailable; showing estimated preview');
@@ -2157,9 +2180,6 @@ function App() {
     });
     lastSpokenStepRef.current = '';
     lastSpokenWarningRef.current = '';
-    if (voiceDirections && speakDirections(`Starting ${selectedRoute.name}. Follow the highlighted route.`)) {
-      lastSpokenStepRef.current = `${selectedRoute.id}-start`;
-    }
     beginLocationWatch(selectedRoute);
   };
 
