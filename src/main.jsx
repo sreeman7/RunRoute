@@ -58,6 +58,9 @@ const MAX_DISTANCE_KM = 60;
 const OSRM_ROUTE_URL = 'https://router.project-osrm.org/route/v1/foot';
 const AI_API_BASE_URL = import.meta.env.VITE_AI_API_BASE_URL || 'http://127.0.0.1:8787';
 const RUNROUTE_USER_ID = 'demo-runner';
+const ROAD_ROUTE_TIMEOUT_MS = 4500;
+const ROAD_ROUTE_ATTEMPT_LIMIT = 7;
+const ROAD_ROUTE_BUDGET_MS = 12000;
 
 const ROUTE_TYPES = [
   { id: 'loop', label: 'Loop' },
@@ -596,7 +599,7 @@ async function fetchRoadRoute(coordinates) {
   const coordinateString = coordinates.map((point) => `${point.lng},${point.lat}`).join(';');
   const url = `${OSRM_ROUTE_URL}/${coordinateString}?overview=full&geometries=geojson&steps=false&continue_straight=false`;
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 9000);
+  const timeout = window.setTimeout(() => controller.abort(), ROAD_ROUTE_TIMEOUT_MS);
 
   try {
     const response = await fetch(url, { signal: controller.signal });
@@ -622,10 +625,17 @@ async function snapRouteToRoads(form, index) {
   let bestRoute = null;
   let bestGap = Number.POSITIVE_INFINITY;
   const scaleCandidates = routeScaleCandidates(form, desiredDistance);
+  const startedAt = Date.now();
+  let attempts = 0;
+  let failedAttempts = 0;
 
-  for (const shapeIndex of routeShapeCandidates(index, desiredDistance, form.routeType)) {
+  shapeSearch: for (const shapeIndex of routeShapeCandidates(index, desiredDistance, form.routeType)) {
     let foundCloseMatch = false;
     for (const scale of scaleCandidates) {
+      if (attempts >= ROAD_ROUTE_ATTEMPT_LIMIT || Date.now() - startedAt > ROAD_ROUTE_BUDGET_MS) {
+        break shapeSearch;
+      }
+
       const waypointCoordinates = buildCoordinates(
         form.start || DEFAULT_START,
         desiredDistance,
@@ -634,7 +644,28 @@ async function snapRouteToRoads(form, index) {
         shapeIndex,
         scale
       );
-      const roadRoute = await fetchRoadRoute(waypointCoordinates);
+      let roadRoute = null;
+      attempts += 1;
+
+      try {
+        roadRoute = await fetchRoadRoute(waypointCoordinates);
+        failedAttempts = 0;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '';
+        const shouldStopEarly =
+          error?.name === 'AbortError' ||
+          message.includes('Failed to fetch') ||
+          message.includes('did not respond') ||
+          message.includes('HTTP');
+
+        if (shouldStopEarly) {
+          failedAttempts += 1;
+          if (failedAttempts >= 2) break shapeSearch;
+        }
+
+        continue;
+      }
+
       const gap = Math.abs(roadRoute.distanceKm - desiredDistance);
 
       if (gap < bestGap) {
@@ -645,6 +676,10 @@ async function snapRouteToRoads(form, index) {
       if (gap <= Math.max(0.03, desiredDistance * 0.025)) {
         foundCloseMatch = true;
         break;
+      }
+
+      if (attempts >= 3 && gap <= Math.max(0.08, desiredDistance * 0.055)) {
+        break shapeSearch;
       }
     }
 
@@ -659,8 +694,12 @@ async function snapRouteToRoads(form, index) {
 }
 
 async function generateRoadSnappedRoutes(form) {
-  const snappedRoutes = await Promise.all([0, 1, 2].map((index) => snapRouteToRoads(form, index)));
-  return snappedRoutes;
+  const snappedRoutes = await Promise.allSettled([0, 1, 2].map((index) => snapRouteToRoads(form, index)));
+  if (snappedRoutes.every((result) => result.status === 'rejected')) {
+    throw new Error('No street/path routes could be snapped');
+  }
+
+  return snappedRoutes.map((result) => (result.status === 'fulfilled' ? result.value : null));
 }
 
 function interpolateRoutePoint(route, distanceKm) {
@@ -2246,11 +2285,12 @@ function App() {
       const roadRoutes = await generateRoadSnappedRoutes(normalizedForm);
       if (routeRequestRef.current !== requestId) return;
       const accurateRoutes = roadRoutes.map((route, index) =>
-        route.distanceStatus === 'Within target range' ? route : estimatedRoutes[index]
+        route?.distanceStatus === 'Within target range' ? route : estimatedRoutes[index]
       );
+      const memorySource = accurateRoutes.some((route) => route.source === 'road') ? 'road' : 'estimated';
       setRoutes(accurateRoutes);
       setSelectedRouteId(accurateRoutes[0].id);
-      persistGeneratedRoutes(accurateRoutes, normalizedForm, 'road');
+      persistGeneratedRoutes(accurateRoutes, normalizedForm, memorySource);
       if (!options.silent) showToast('Best accurate street/path matches applied');
     } catch {
       if (routeRequestRef.current !== requestId) return;
