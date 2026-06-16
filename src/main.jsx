@@ -820,6 +820,43 @@ function routeBestUse(route, form) {
   return 'Easy long run';
 }
 
+function routeRisk(route) {
+  if (route.safetyScore < 72 || route.difficultyScore > 72) return { label: 'Review', tone: 'warning' };
+  if (route.difficultyScore > 52 || route.elevationGain > route.distanceKm * 13) return { label: 'Moderate', tone: 'moderate' };
+  return { label: 'Low risk', tone: 'good' };
+}
+
+function routeTradeoff(route, routes) {
+  const safest = routes.reduce((best, candidate) => (candidate.safetyScore > best.safetyScore ? candidate : best), routes[0]);
+  const mostScenic = routes.reduce((best, candidate) => (candidate.scenicScore > best.scenicScore ? candidate : best), routes[0]);
+  const flattest = routes.reduce((best, candidate) => (candidate.elevationGain < best.elevationGain ? candidate : best), routes[0]);
+  const mostHydrated = routes.reduce(
+    (best, candidate) => (candidate.hydrationScore > best.hydrationScore ? candidate : best),
+    routes[0]
+  );
+
+  if (route.id === safest?.id) return 'Best safety margin and easiest route to defend in a demo.';
+  if (route.id === mostScenic?.id) return 'Strongest scenic value with a more memorable long-run feel.';
+  if (route.id === flattest?.id) return 'Lowest elevation stress for controlled endurance pacing.';
+  if (route.id === mostHydrated?.id) return 'Most useful for long-run fueling and refill planning.';
+  return 'Balanced option with fewer standout risks or tradeoffs.';
+}
+
+function routeEliteScore(route) {
+  return clamp(
+    Math.round(
+      route.safetyScore * 0.3 +
+        route.hydrationScore * 0.2 +
+        route.scenicScore * 0.16 +
+        route.interruptionScore * 0.14 +
+        (100 - route.difficultyScore) * 0.14 +
+        route.modeFit * 0.06
+    ),
+    1,
+    99
+  );
+}
+
 function analyzeRoutes(routes, selectedRoute, form, memory) {
   const scoredRoutes = [...routes].sort((first, second) => second.modeFit - first.modeFit);
   const bestRoute = scoredRoutes[0] || selectedRoute;
@@ -829,7 +866,17 @@ function analyzeRoutes(routes, selectedRoute, form, memory) {
     id: route.id,
     name: route.name,
     bestFor: routeBestUse(route, form),
-    fit: route.modeFit
+    fit: route.modeFit,
+    score: routeEliteScore(route),
+    rank: scoredRoutes.findIndex((candidate) => candidate.id === route.id) + 1,
+    safety: route.safetyScore,
+    difficulty: route.difficultyScore,
+    hydration: route.hydrationScore,
+    scenic: route.scenicScore,
+    elevationGain: route.elevationGain,
+    distanceKm: route.distanceKm,
+    risk: routeRisk(route),
+    tradeoff: routeTradeoff(route, routes)
   }));
   const selected = selectedRoute || bestRoute;
   const fatigueNote =
@@ -875,6 +922,49 @@ function analyzeRoutes(routes, selectedRoute, form, memory) {
       ? `Next run can bias toward ${memory.favoriteStyle} and stay near your ${memory.averageDistance} km saved-route average.`
       : 'After one saved route, the agent can personalize distance, terrain, and difficulty.',
     mongodb: 'MongoDB Atlas/MCP-ready memory surface: profile, route history, preferences, and AI notes can map directly to collections.'
+  };
+}
+
+function buildAdaptiveCoach(memory, form, selectedRoute, savedActivities) {
+  const lastRoute = memory.lastRoute;
+  const baselineDistance = Number(lastRoute?.distanceKm || selectedRoute?.distanceKm || form.distanceKm || 20);
+  const goal = form.trainingGoal;
+  const distanceStep =
+    goal === 'Recovery run' ? -2 : goal === 'Hill training' ? 1 : goal === 'Tempo route' ? 0 : baselineDistance >= 30 ? 1 : 2;
+  const nextDistance = round(clamp(baselineDistance + distanceStep, 1, MAX_DISTANCE_KM), 1);
+  const rampPercent = baselineDistance > 0 ? round(((nextDistance - baselineDistance) / baselineDistance) * 100, 1) : 0;
+  const readiness =
+    memory.savedCount >= 4 ? 'High confidence' : memory.savedCount >= 2 ? 'Learning pattern' : memory.savedCount === 1 ? 'Early signal' : 'Cold start';
+  const confidence = clamp(58 + memory.savedCount * 8 + savedActivities.length * 4, 58, 94);
+  const hydrationEvery = nextDistance >= 30 ? '5-6 km' : nextDistance >= 18 ? '6-8 km' : '8-10 km';
+  const terrainBias = memory.savedCount > 0 ? memory.favoriteStyle : form.style;
+  const loadNote =
+    rampPercent > 8
+      ? 'Aggressive ramp. Keep pace easy or reduce elevation.'
+      : rampPercent < 0
+        ? 'Recovery bias. Lower distance and keep effort controlled.'
+        : 'Healthy progression for long-run development.';
+
+  return {
+    confidence,
+    readiness,
+    nextDistance,
+    rampPercent,
+    hydrationEvery,
+    terrainBias,
+    loadNote,
+    lastRouteLabel: lastRoute ? `${lastRoute.name} · ${formatDistance(lastRoute.distanceKm)}` : 'No saved route yet',
+    activityCount: savedActivities.length,
+    signals: [
+      `${memory.savedCount} saved route${memory.savedCount === 1 ? '' : 's'}`,
+      `${savedActivities.length} recorded activit${savedActivities.length === 1 ? 'y' : 'ies'}`,
+      `${terrainBias} terrain bias`
+    ],
+    actions: [
+      `Next target: ${formatDistance(nextDistance)}`,
+      `Hydration every ${hydrationEvery}`,
+      selectedRoute?.elevationGain > selectedRoute?.distanceKm * 12 ? 'Choose lower elevation if legs feel heavy' : 'Elevation load is controlled'
+    ]
   };
 }
 
@@ -1514,6 +1604,129 @@ function GeminiRecommendationPanel({ analysis, loading, error, source, nextRunPl
   );
 }
 
+function MiniMetric({ label, value, tone = 'green' }) {
+  return (
+    <div className="miniMetric">
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
+      <div className="miniMetricTrack" aria-hidden="true">
+        <span className={tone} style={{ width: `${clamp(value, 0, 100)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function RouteIntelligencePanel({ analysis, selectedRouteId, onSelectRoute }) {
+  return (
+    <section className="routeIntelPanel" aria-label="Elite route comparison">
+      <div className="routeIntelHeader">
+        <div>
+          <span className="eyebrow">Elite route intelligence</span>
+          <h2>Why each option exists</h2>
+        </div>
+        <span>{analysis.comparison.length} options scored</span>
+      </div>
+
+      <div className="routeIntelGrid">
+        {analysis.comparison.map((row) => (
+          <button
+            className={`routeIntelCard ${selectedRouteId === row.id ? 'selected' : ''}`}
+            key={row.id}
+            onClick={() => onSelectRoute(row.id)}
+            type="button"
+          >
+            <div className="routeIntelTop">
+              <span className="rankPill">#{row.rank}</span>
+              <div>
+                <strong>{row.name}</strong>
+                <small>{row.bestFor}</small>
+              </div>
+              <span className={`riskPill ${row.risk.tone}`}>{row.risk.label}</span>
+            </div>
+
+            <div className="eliteScore">
+              <span>Elite score</span>
+              <strong>{row.score}/100</strong>
+              <div aria-hidden="true">
+                <span style={{ width: `${row.score}%` }} />
+              </div>
+            </div>
+
+            <div className="miniMetricGrid">
+              <MiniMetric label="Safety" value={row.safety} />
+              <MiniMetric label="Hydration" value={row.hydration} />
+              <MiniMetric label="Scenic" value={row.scenic} />
+              <MiniMetric label="Ease" value={100 - row.difficulty} tone="orange" />
+            </div>
+
+            <p>{row.tradeoff}</p>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AdaptiveMemoryPanel({ coach }) {
+  return (
+    <aside className="coachPanel" aria-label="Adaptive training memory">
+      <div className="coachHeader">
+        <span className="coachIcon">
+          <Database aria-hidden="true" size={20} />
+        </span>
+        <div>
+          <span className="eyebrow">Adaptive training memory</span>
+          <h2>{coach.readiness}</h2>
+        </div>
+        <strong>{coach.confidence}%</strong>
+      </div>
+
+      <div className="coachHeroStat">
+        <span>Next long-run target</span>
+        <strong>{formatDistance(coach.nextDistance)}</strong>
+        <small>{coach.rampPercent >= 0 ? '+' : ''}{coach.rampPercent}% progression</small>
+      </div>
+
+      <div className="coachSignalGrid">
+        <div>
+          <Trophy aria-hidden="true" size={17} />
+          <span>Last route</span>
+          <strong>{coach.lastRouteLabel}</strong>
+        </div>
+        <div>
+          <Droplets aria-hidden="true" size={17} />
+          <span>Hydration spacing</span>
+          <strong>{coach.hydrationEvery}</strong>
+        </div>
+        <div>
+          <Trees aria-hidden="true" size={17} />
+          <span>Terrain bias</span>
+          <strong>{coach.terrainBias}</strong>
+        </div>
+      </div>
+
+      <p className="coachNote">{coach.loadNote}</p>
+
+      <div className="coachLists">
+        <section>
+          <h3>Learned signals</h3>
+          {coach.signals.map((signal) => (
+            <span key={signal}>{signal}</span>
+          ))}
+        </section>
+        <section>
+          <h3>Agent actions</h3>
+          {coach.actions.map((action) => (
+            <span key={action}>{action}</span>
+          ))}
+        </section>
+      </div>
+    </aside>
+  );
+}
+
 function AIAssistantPanel({
   analysis,
   agentMessages,
@@ -2052,6 +2265,10 @@ function App() {
   const agentAnalysis = useMemo(
     () => analyzeRoutes(routes, selectedRoute, form, runnerMemory),
     [form, routes, runnerMemory, selectedRoute]
+  );
+  const adaptiveCoach = useMemo(
+    () => buildAdaptiveCoach(runnerMemory, form, selectedRoute, savedActivities),
+    [form, runnerMemory, savedActivities, selectedRoute]
   );
   const displayedAiRecommendation = useMemo(
     () => aiRecommendation || localGeminiShape(agentAnalysis),
@@ -2619,6 +2836,11 @@ function App() {
                 <strong>{selectedRoute.distanceStatus}</strong>
               </span>
             </div>
+            <RouteIntelligencePanel
+              analysis={agentAnalysis}
+              selectedRouteId={selectedRouteId}
+              onSelectRoute={setSelectedRouteId}
+            />
             <div className="routeList">
               {routes.map((route) => (
                 <RouteCard
@@ -2643,6 +2865,7 @@ function App() {
               onPlanNextRun={planNextRun}
               onRefresh={() => requestAiRecommendation(routes, form)}
             />
+            <AdaptiveMemoryPanel coach={adaptiveCoach} />
             <AIAssistantPanel
               analysis={agentAnalysis}
               agentMessages={agentMessages}

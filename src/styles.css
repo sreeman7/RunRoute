@@ -661,6 +661,211 @@ select {
   box-shadow: 0 14px 36px rgba(31, 122, 90, 0.16);
 }
 
+.routeIntelPanel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.darkMode .routeIntelPanel {
+  background: rgba(18, 26, 23, 0.94);
+}
+
+.routeIntelHeader,
+.routeIntelTop,
+.eliteScore {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.routeIntelHeader > span {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 6px 10px;
+  color: #061016;
+  background: var(--cyan);
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 950;
+}
+
+.routeIntelGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.routeIntelCard {
+  display: grid;
+  gap: 12px;
+  min-height: 260px;
+  padding: 13px;
+  color: var(--ink);
+  background:
+    linear-gradient(145deg, rgba(27, 216, 255, 0.08), rgba(139, 92, 246, 0.08)),
+    var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-align: left;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.routeIntelCard:hover,
+.routeIntelCard.selected {
+  transform: translateY(-2px);
+  border-color: rgba(27, 216, 255, 0.44);
+  box-shadow: 0 18px 42px rgba(27, 216, 255, 0.12);
+}
+
+.routeIntelTop {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.routeIntelTop div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.routeIntelTop strong,
+.routeIntelTop small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.routeIntelTop small,
+.eliteScore span,
+.miniMetric span,
+.routeIntelCard p,
+.coachHeroStat span,
+.coachHeroStat small,
+.coachSignalGrid span,
+.coachNote,
+.coachLists span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.rankPill,
+.riskPill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.rankPill {
+  color: #061016;
+  background: var(--cyan);
+}
+
+.riskPill.good {
+  color: var(--green-dark);
+  background: rgba(31, 122, 90, 0.13);
+  border: 1px solid rgba(31, 122, 90, 0.28);
+}
+
+.riskPill.moderate {
+  color: #754a0c;
+  background: rgba(240, 168, 76, 0.18);
+  border: 1px solid rgba(240, 168, 76, 0.36);
+}
+
+.riskPill.warning {
+  color: var(--red);
+  background: rgba(191, 63, 74, 0.13);
+  border: 1px solid rgba(191, 63, 74, 0.3);
+}
+
+.darkMode .riskPill.moderate {
+  color: #ffd166;
+}
+
+.eliteScore {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.eliteScore strong {
+  color: var(--purple);
+  font-size: 1rem;
+}
+
+.eliteScore div {
+  grid-column: 1 / -1;
+  height: 8px;
+  overflow: hidden;
+  background: rgba(139, 92, 246, 0.14);
+  border-radius: 999px;
+}
+
+.eliteScore div span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), var(--purple));
+  border-radius: inherit;
+}
+
+.miniMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.miniMetric {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.miniMetric div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.miniMetric strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.miniMetricTrack {
+  height: 6px;
+  overflow: hidden;
+  background: rgba(97, 112, 104, 0.16);
+  border-radius: 999px;
+}
+
+.miniMetricTrack span {
+  display: block;
+  height: 100%;
+  background: var(--green);
+  border-radius: inherit;
+}
+
+.miniMetricTrack span.orange {
+  background: var(--orange);
+}
+
 .aiCardStrip {
   display: flex;
   align-items: center;
@@ -1018,12 +1223,128 @@ select {
   gap: 8px;
 }
 
+.coachPanel {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  color: var(--ink);
+  background:
+    linear-gradient(145deg, rgba(31, 122, 90, 0.12), rgba(47, 101, 215, 0.1)),
+    rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(27, 216, 255, 0.24);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.coachHeader {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.coachHeader h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coachHeader > strong {
+  color: var(--cyan);
+  font-size: 1.05rem;
+}
+
+.coachIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: #ffffff;
+  background: var(--green);
+  border-radius: 8px;
+}
+
+.coachHeroStat {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  background: rgba(27, 216, 255, 0.1);
+  border: 1px solid rgba(27, 216, 255, 0.24);
+  border-radius: 8px;
+}
+
+.coachHeroStat strong {
+  color: var(--ink);
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.coachSignalGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.coachSignalGrid div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.coachSignalGrid svg {
+  color: var(--blue);
+}
+
+.coachSignalGrid strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coachNote {
+  padding: 10px 12px;
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.22);
+  border-radius: 8px;
+}
+
+.coachLists {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.coachLists section {
+  display: grid;
+  gap: 7px;
+}
+
+.coachLists h3 {
+  font-size: 0.82rem;
+}
+
+.coachLists span {
+  display: block;
+  padding: 8px 9px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
 .darkMode .aiPanel,
 .darkMode .plannerPanel,
 .darkMode .mapPanel,
 .darkMode .detailsPanel,
 .darkMode .savedPanel,
 .darkMode .routeCard,
+.darkMode .routeIntelCard,
+.darkMode .coachPanel,
 .darkMode .savedCard {
   background: rgba(18, 26, 23, 0.94);
 }
@@ -1773,6 +2094,7 @@ select {
 
   .plannerLayout,
   .routeList,
+  .routeIntelGrid,
   .savedGrid,
   .runStatsGrid {
     grid-template-columns: 1fr;
@@ -1823,7 +2145,10 @@ select {
   .twoColumn,
   .styleGrid,
   .modeGrid,
-  .actionRow {
+  .actionRow,
+  .coachSignalGrid,
+  .coachLists,
+  .miniMetricGrid {
     grid-template-columns: 1fr;
   }
 

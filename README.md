@@ -24,6 +24,8 @@ The project is built as a hackathon-ready full-stack MVP with a React map interf
 - Street/path-snapped route lines through OSRM when available
 - Fast fallback to estimated routes when the routing service is slow or unavailable
 - RunRoute AI Recommendation panel powered by the backend Gemini endpoint
+- Elite route intelligence matrix with safety, hydration, scenic, ease, risk, and tradeoff scoring
+- Adaptive training memory coach with next-run target, ramp percentage, learned signals, and agent actions
 - Safety, difficulty, hydration, elevation, and training analysis
 - Save route memory locally and through MongoDB-ready backend endpoints
 - Adaptive "Plan My Next Run" recommendation from route history
@@ -287,6 +289,8 @@ The app saves:
 - Previous pace and distance
 
 When MongoDB is configured, this memory is stored in MongoDB. Without MongoDB, the backend uses an in-memory store so the demo still works locally.
+
+The adaptive coach turns that memory into a next-run target, hydration spacing, terrain bias, progression percentage, and practical agent actions.
 
 ### Live Run Mode
 
