@@ -3,8 +3,10 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { MongoClient } = require('mongodb');
+const { createWalkingHandler } = require('./walking');
+const path = require('node:path');
 
-dotenv.config();
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 const port = Number(process.env.PORT || 8787);
@@ -22,6 +24,19 @@ const memoryStore = {
 
 app.use(cors({ origin: clientOrigin }));
 app.use(express.json({ limit: '1mb' }));
+app.disable('x-powered-by');
+app.post('/api/routes/walking', createWalkingHandler());
+
+// Old demo endpoints stay opt-in; publishing the studio must not enable AI spending
+// or expose shared demo-runner memory just because credentials already exist.
+app.use('/api/analyze-routes', (_request, response, next) => {
+  if (process.env.ENABLE_AI !== 'true') return response.status(403).json({ error: 'AI analysis is disabled.' });
+  next();
+});
+app.use(['/api/memory', '/api/routes/generated', '/api/routes/save', '/api/agent'], (_request, response, next) => {
+  if (process.env.ENABLE_LEGACY_MEMORY !== 'true') return response.status(403).json({ error: 'Shared demo memory is disabled. Routes are saved on this device.' });
+  next();
+});
 
 function routeName(route, index) {
   return route?.name || route?.label || `Route ${index + 1}`;
@@ -346,8 +361,9 @@ Return this exact JSON shape:
 app.get('/api/health', (_request, response) => {
   response.json({
     ok: true,
-    service: 'RunRoute AI Gemini backend',
-    geminiConfigured: Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_key_here'),
+    service: 'RunRoute routing backend',
+    geminiConfigured: process.env.ENABLE_AI === 'true' && Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_key_here'),
+    walkingConfigured: Boolean(process.env.ORS_API_KEY && process.env.ORS_API_KEY !== 'your_ors_key_here'),
     mongodbConfigured: hasMongoConfig()
   });
 });
@@ -441,6 +457,14 @@ app.post('/api/agent/next-run', async (request, response) => {
   }
 });
 
-app.listen(port, host, () => {
-  console.log(`RunRoute AI backend listening on http://${host}:${port}`);
+app.use(express.static(path.join(__dirname, '../dist')));
+app.use((error, _request, response, _next) => {
+  response.status(error.type === 'entity.too.large' ? 413 : 400).json({ error: 'Invalid request body.' });
 });
+
+if (require.main === module) {
+  app.listen(port, host, () => {
+    console.log(`RunRoute backend listening on http://${host}:${port}`);
+  });
+}
+module.exports = app;

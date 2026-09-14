@@ -1,360 +1,155 @@
-# RunRoute AI
+# RunRoute
 
-An adaptive AI navigation agent for endurance runners.
+A map-first running route studio, with route art made from shapes, text, and image outlines.
 
-RunRoute AI helps runners plan long-distance routes without repeating boring loops. A runner enters a start location, target distance, pace, route style, and training goal, then the app generates three nearby route options, shows them on a street map, compares safety and difficulty, and uses AI route analysis to recommend the best choice.
+**No AI model or AI credits are required for the current interface.** Outline processing happens in the browser. Turning an outline into a walking route requires a routing provider.
 
-The project is built as a hackathon-ready full-stack MVP with a React map interface, an Express backend, Gemini route analysis, MongoDB-ready route memory, live run guidance, voice directions, and local activity recording.
+## What Works
 
-## Links
+- Heart, star, and lightning-bolt templates.
+- Text outlines for 1-6 Latin letters or numbers.
+- PNG, JPEG, and WebP outline extraction, with threshold and inversion controls.
+- Design distance, rotation, coordinate entry, current location, and map placement.
+- Explicit connecting legs between separate contours, including letter interiors.
+- Local design saving and reopening.
+- A server-side Openrouteservice walking integration.
+- Side-by-side design and fitted-path overlays, actual walking distance, and mean path deviation.
+- Basic run planning with up to three walking-route candidates.
+- Device-local saved routes, GPX/KML export helpers, browser GPS recording, and voice prompts.
+- Light and dark themes, responsive layouts, keyboard-accessible controls.
 
-| Item | Link |
-| --- | --- |
-| Public repo | Add your GitHub repository URL |
-| Live app | Add your hosted frontend URL |
-| Backend API | Add your hosted backend URL |
-| Demo video | Add your demo video URL |
-| License | MIT |
-| Hackathon track | MongoDB |
+## Honest Limits
 
-## Highlights
+Route Art is a **beta fitting tool**, not an automatic street-network shape optimizer.
 
-- Generate 3 route options: Alpha, Pulse, and Horizon
-- Target-distance accuracy with a +/- 2.5% acceptable range
-- Street/path-snapped route lines through OSRM when available
-- Fast fallback to estimated routes when the routing service is slow or unavailable
-- RunRoute AI Recommendation panel powered by the backend Gemini endpoint
-- Elite route intelligence matrix with safety, hydration, scenic, ease, risk, and tradeoff scoring
-- Adaptive training memory coach with next-run target, ramp percentage, learned signals, and agent actions
-- Safety, difficulty, hydration, elevation, and training analysis
-- Save route memory locally and through MongoDB-ready backend endpoints
-- Adaptive "Plan My Next Run" recommendation from route history
-- Live run mode with route-following guidance
-- Browser voice directions for navigation prompts
-- Local activity recording with elapsed time, distance, pace, and GPS track
-- GPX and KML export
-- Responsive dark futuristic interface with map-first layout
+The outline preview is geometry, not a runnable route. Street fitting requests a walking route through at most 48 design points. The result can deviate substantially from the image, repeat streets, or exceed the requested distance. Complex photos and detailed artwork may not produce useful outlines. There is no guarantee that an arbitrary drawing is feasible in a given neighborhood.
 
-## Demo Flow
+Only routes returned by the walking provider can be saved as runnable routes, exported, or started. Drafts can be saved as designs. Old locally saved prototype routes remain visible but need rerouting before running.
 
-1. Enter a 20 km marathon training run.
-2. Generate three route options: Alpha, Pulse, and Horizon.
-3. Show the map with route lines, stops, distance, time, elevation, and safety.
-4. Open the RunRoute AI Recommendation panel.
-5. Show AI confidence, why the route is best, safety note, training note, and hydration advice.
-6. Save a route to create route memory.
-7. Click `Plan My Next Run`.
-8. Show the adaptive recommendation, for example: "Based on your last 20 km run, your next long run should be 22 km with lower elevation and more hydration stops."
-9. Open live run mode to show route following, voice directions, and activity recording.
+Safety, lighting, live weather, elevation, and water-stop claims from the earlier prototype have been removed from the interface. A walking profile is not a guarantee of safe or legal access. Review crossings, closures, and local access before running.
 
-## Tech Stack
+Browser GPS is foreground-only in practice: keep the page open and the screen awake. This is not yet a reliable locked-screen replacement for a native run tracker. No live emergency sharing, automatic rerouting, cloud account sync, or Strava upload is included.
 
-| Layer | Technology |
-| --- | --- |
-| Frontend | React, Vite, Leaflet, OpenStreetMap tiles, lucide-react |
-| Styling | Custom CSS, responsive grid layout, dark mode |
-| Routing | OSRM foot routing with estimated fallback |
-| Backend | Node.js, Express, CORS, dotenv |
-| AI | Google Gemini via `@google/generative-ai` |
-| Database | MongoDB driver with in-memory fallback for local demos |
-| Export | GPX and KML file generation |
+## Development
 
-## Architecture
+Use Node.js 22.12 or later.
 
-```mermaid
-flowchart LR
-  User["Runner"] --> UI["React + Leaflet UI"]
-  UI --> RouteGen["Route Generator"]
-  RouteGen --> OSRM["OSRM Foot Routing"]
-  RouteGen --> Fallback["Estimated Route Fallback"]
-  UI --> API["Express Backend"]
-  API --> Gemini["Gemini Route Analysis"]
-  API --> Mongo["MongoDB Route Memory"]
-  API --> Memory["In-Memory Demo Store"]
-  UI --> RunMode["Live Run Mode + Voice Directions"]
+```sh
+npm ci
+npm --prefix server ci
+npm run dev:server
 ```
 
-## Project Structure
+In another terminal:
 
-```text
-RunRoute/
-  src/
-    main.jsx          # React app, route generation, map, AI panel, run mode
-    styles.css        # Full responsive UI styling
-  server/
-    index.js          # Express API, Gemini analysis, MongoDB memory endpoints
-    .env.example      # Backend environment variable template
-  README.md
-  LICENSE
-  package.json
+```sh
+npm run dev
 ```
 
-## Getting Started
+Open [the local app](http://127.0.0.1:5173/). Vite proxies `/api` to the backend on port 8787. The design workspace works without a backend; street fitting shows an unavailable state instead of returning fictional paths.
 
-### 1. Install frontend dependencies
+### Routing Configuration
 
-```bash
-npm install
-```
+Add these variables to `server/.env` or the hosting environment. Do not overwrite existing credentials when updating a local configuration.
 
-### 2. Install backend dependencies
-
-```bash
-cd server
-npm install
-cp .env.example .env
-```
-
-### 3. Configure backend environment
-
-Edit `server/.env`:
-
-```bash
-GEMINI_API_KEY=your_gemini_key_here
-MONGODB_URI=your_mongodb_uri_here
-MONGODB_DB=runroute_ai
+```dotenv
+ORS_API_KEY=your_openrouteservice_key
+ROUTING_DAILY_LIMIT=100
+ENABLE_AI=false
+ENABLE_LEGACY_MEMORY=false
 PORT=8787
+HOST=127.0.0.1
 CLIENT_ORIGIN=http://127.0.0.1:5173
 ```
 
-Keep API keys and database credentials in `server/.env`. Do not put them in frontend code.
+The ORS key stays on the server. Never give it a `VITE_` prefix. Text/image bytes are not uploaded: only the derived longitude/latitude waypoints are sent to the routing server, then to Openrouteservice.
 
-### 4. Start the backend
+For a separately hosted frontend, set `VITE_API_BASE_URL` at build time. The default is same-origin requests. Tile URL and attribution can be changed together using `VITE_MAP_TILE_URL` and `VITE_MAP_ATTRIBUTION`.
 
-```bash
-npm run dev
-```
+### Cost Controls
 
-The backend runs at:
+- No Gemini requests from the current frontend.
+- The legacy Gemini endpoint is disabled unless `ENABLE_AI=true`.
+- One provider call per Route Art fit; up to three for a normal route search.
+- Identical successful requests are cached for 30 minutes, up to 50 entries.
+- Default limit: 100 provider requests per UTC day per server process.
+- Additional limits: 12 uncached requests per IP per hour and three concurrent upstream requests.
+- Provider failures count toward the budget; cache hits do not.
 
-```text
-http://127.0.0.1:8787
-```
+These are in-process safeguards, **not a billing guarantee**. They reset when the process restarts and are not shared across replicas. Before opening a public service, enforce provider account quotas and use durable, shared rate limiting at the hosting layer. Configure proxy trust only for the actual deployment; the development server does not trust client-supplied forwarding headers.
 
-### 5. Start the frontend
+Map tiles, routing, and hosting still have provider policies, quotas, and potential costs. Do not promise unlimited free use or bulk/offline-download OpenStreetMap tiles. The included OSM tile configuration is for low-volume development; review the [tile usage policy](https://operations.osmfoundation.org/policies/tiles/) before publishing.
 
-Open a second terminal from the project root:
+## Build and Hosting
 
-```bash
-npm run dev
-```
-
-The frontend runs at:
-
-```text
-http://127.0.0.1:5173
-```
-
-## Quality Checks
-
-Run the production build before submitting:
-
-```bash
+```sh
+npm test
 npm run build
+npm start
 ```
 
-Check backend syntax:
+The Express server serves the production `dist/` directory and API from one origin. Set `HOST=0.0.0.0`, the host's assigned `PORT`, and `CLIENT_ORIGIN` to your HTTPS app URL. Do not expose the Vite development server publicly.
 
-```bash
-node --check server/index.js
-```
+No deployment has been created by this change. Before launch:
 
-Check installed backend dependencies:
+- Connect a walking provider and test real routes in the intended launch city.
+- Set provider-side spending/usage limits and durable public rate limiting.
+- Choose a production tile provider with appropriate attribution and usage terms.
+- Configure HTTPS; browser location permissions require a secure context outside localhost.
+- Keep `ENABLE_AI=false` and `ENABLE_LEGACY_MEMORY=false`.
+- Add a privacy notice explaining local storage, GPS, map tiles, and transmitted route waypoints.
+- Validate navigation outdoors and on target phones.
+- Add authentication before enabling any shared cloud memory.
+- Add account deletion/data export before storing personal route history in the cloud.
 
-```bash
-npm --prefix server ls --depth=0
-```
+## API
 
-## Environment Variables
-
-### Backend
-
-| Variable | Required | Description |
-| --- | --- | --- |
-| `GEMINI_API_KEY` | Recommended | Enables live Gemini analysis. If missing, the backend returns a local fallback. |
-| `MONGODB_URI` | Recommended | Enables MongoDB route memory. If missing, the backend uses in-memory demo storage. |
-| `MONGODB_DB` | No | Database name. Defaults to `runroute_ai`. |
-| `PORT` | No | Backend port. Defaults to `8787`. |
-| `CLIENT_ORIGIN` | No | Allowed frontend origin for CORS. Defaults to `http://127.0.0.1:5173`. |
-
-### Frontend
-
-| Variable | Required | Description |
-| --- | --- | --- |
-| `VITE_AI_API_BASE_URL` | No | Backend URL for deployed environments. Defaults to `http://127.0.0.1:8787`. |
-
-## API Reference
-
-### Health Check
-
-```http
-GET /api/health
-```
-
-Returns backend status plus whether Gemini and MongoDB are configured.
-
-### Analyze Routes
-
-```http
-POST /api/analyze-routes
-```
-
-Request:
+### POST /api/routes/walking
 
 ```json
 {
-  "routes": [],
-  "distance": 20,
-  "pace": "7:00 /km",
-  "trainingGoal": "Marathon prep",
-  "routeStyle": "parks"
+  "coordinates": [[-113.5263, 53.5232], [-113.5200, 53.5300]]
 }
 ```
 
-Response:
+Returns a `route` with latitude/longitude coordinates, actual `distanceKm`, provider navigation steps, `source: "walking"`, and attribution. Invalid input returns 400, missing configuration 503, request limits 429, and provider failures 502. No geometric fallback is returned.
 
-```json
-{
-  "source": "gemini",
-  "analysis": {
-    "bestRouteId": "route-id",
-    "bestRouteName": "Alpha",
-    "confidence": 92,
-    "whyThisRoute": "Short reason",
-    "safetyAnalysis": "Safety note",
-    "difficultyAnalysis": "Difficulty note",
-    "hydrationAdvice": "Hydration advice",
-    "trainingRecommendation": "Training recommendation"
-  }
-}
+`GET /api/health` reports configuration presence, not verified provider connectivity.
+
+The earlier Gemini and MongoDB endpoints remain in the backend for optional future work. They are disabled by default. The old demo memory implementation has no account authentication and is **not suitable for public multi-user deployment**.
+
+## Project Layout
+
+```text
+src/
+  main.jsx                       Application entry
+  App.jsx                        Planner, saved routes, run session
+  studio.css                     Shared responsive design system
+  components/
+    RouteArtStudio.jsx           Text/image/design workflow
+    StudioMap.jsx                Leaflet map and controls
+    PlannerWorkspace.jsx         Standard route planning
+  lib/
+    route-art.js                 Contour extraction and map projection
+    routing-api.js               Walking API client
+    run-metrics.js               GPS distance and route progress
+server/
+  index.js                       Express, static hosting, legacy integrations
+  walking.js                     Validated, bounded walking provider adapter
+tests/
+  route-art.test.js               Geometry and contour regression tests
+  walking.test.js                 Provider, validation, budget and cache tests
+  run-metrics.test.js             GPS and loop-progress regression tests
 ```
 
-### Save Generated Routes
+## Implementation Notes
 
-```http
-POST /api/routes/generated
-```
+Image outlines use [D3 contour polygons](https://d3js.org/d3-contour/contour); waypoint reduction uses Simplify.js. Street fitting uses [Openrouteservice walking directions](https://giscience.github.io/openrouteservice/api-reference/endpoints/directions/), within its [waypoint restrictions](https://openrouteservice.org/restrictions/).
 
-Saves generated route batches, route preferences, training goal, and previous pace/distance.
+The mean-deviation metric is a distance-weighted average from the fitted walking path to the design segments, including connecting legs. It is not a safety score or AI confidence value. Smaller is closer to the drawing, but visual review is still necessary.
 
-### Save Selected Route
-
-```http
-POST /api/routes/save
-```
-
-Saves a selected route to route memory.
-
-### Plan Next Run
-
-```http
-POST /api/agent/next-run
-```
-
-Returns an adaptive recommendation based on saved route history.
-
-### Get Memory
-
-```http
-GET /api/memory/:userId
-```
-
-Returns saved route memory and preferences for debugging or demo checks.
-
-## Core Features
-
-### Route Generation
-
-RunRoute AI creates three route options near the selected start location. It first builds estimated route geometry, then attempts to snap the route to OSRM walking paths. If OSRM is slow or unavailable, the app quickly returns to the estimated route preview instead of leaving the user stuck.
-
-### AI Recommendation
-
-The RunRoute AI Recommendation panel compares route options and shows:
-
-- Best route
-- AI confidence
-- Why this route is best
-- Safety analysis
-- Training recommendation
-- Hydration advice
-
-### Adaptive Route Memory
-
-The app saves:
-
-- Generated routes
-- Saved routes
-- User preferences
-- Training goal
-- Previous pace and distance
-
-When MongoDB is configured, this memory is stored in MongoDB. Without MongoDB, the backend uses an in-memory store so the demo still works locally.
-
-The adaptive coach turns that memory into a next-run target, hydration spacing, terrain bias, progression percentage, and practical agent actions.
-
-### Live Run Mode
-
-Live run mode includes:
-
-- Route-following screen
-- Start, pause, resume, finish, and reset controls
-- GPS track recording
-- Route progress
-- Off-route warning
-- Browser voice directions
-- Saved activity history
-
-## Troubleshooting
-
-| Issue | What to check |
-| --- | --- |
-| Gemini panel shows local fallback | Make sure `GEMINI_API_KEY` is set in `server/.env` and the backend is running. |
-| MongoDB memory uses in-memory storage | Make sure `MONGODB_URI` is set in `server/.env`. |
-| Frontend cannot reach backend | Confirm the backend is running on `http://127.0.0.1:8787` or set `VITE_AI_API_BASE_URL`. |
-| Map shows estimated route preview | OSRM may be slow or unavailable; the app falls back quickly so planning still works. |
-| Voice directions do not work | Use a browser that supports the Web Speech API. |
-
-## Demo Video Plan
-
-Keep the video under 3 minutes.
-
-| Time | What to show |
-| --- | --- |
-| 0:00-0:25 | Problem: long-route planning is hard and repetitive |
-| 0:25-1:05 | Enter a 20 km marathon training route |
-| 1:05-1:40 | Generate Alpha, Pulse, and Horizon on the map |
-| 1:40-2:10 | Show Gemini recommendation and route reasoning |
-| 2:10-2:35 | Save route and click `Plan My Next Run` |
-| 2:35-3:00 | Show live run mode, voice toggle, GPX/KML export |
-
-## Portfolio Description
-
-RunRoute AI is a full-stack endurance route planning app that generates personalized long-distance running routes based on user location, target distance, safety, elevation, hydration stops, and training goals. It integrates interactive maps, route scoring, AI recommendations, adaptive route memory, GPX/KML export, live route following, browser voice directions, and activity recording.
-
-## Roadmap
-
-- Add real user authentication
-- Deploy frontend and backend
-- Connect production MongoDB Atlas cluster
-- Add Mapbox or OpenRouteService support for richer route data
-- Add weather and air-quality API integration
-- Improve turn-by-turn instruction generation
-- Add Strava and Garmin export integrations
-- Build a React Native mobile app
-
-## Submission Checklist
-
-- [ ] Public GitHub repository is available
-- [ ] MIT license is visible
-- [ ] README includes setup instructions
-- [ ] Frontend is deployed
-- [ ] Backend is deployed
-- [ ] Gemini key is configured on the backend host
-- [ ] MongoDB URI is configured on the backend host
-- [ ] Demo video is under 3 minutes
-- [ ] Devpost form is complete
-- [ ] MongoDB track is selected
+Future work should prioritize neighborhood-wide shape placement, graph-based shape matching, reliable native recording, and durable abuse protection over adding an AI chat panel.
 
 ## License
 
-This project is licensed under the MIT License. See `LICENSE` for details.
+[MIT](LICENSE).

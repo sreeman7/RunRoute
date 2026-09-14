@@ -1,0 +1,17 @@
+Created using the built-in image generation tool.
+
+Final generation prompt:
+
+Use case: ads-marketing.
+Asset type: finished premium motivational Mac desktop wallpaper, flat digital artwork, landscape 16:10 aspect ratio, request 3200 x 2000 pixels.
+Primary request: Design an exceptionally polished, aspirational personal wallpaper for a university student who has promised themselves they will compete in IRONMAN 70.3 only if their semester GPA is strictly greater than 3.5. Every glance should connect doing the next study session with earning the triathlon start line.
+Art direction: cinematic endurance-sport campaign meets restrained Swiss editorial typography. Deep midnight charcoal and subtly textured dark blue-black, warm ivory typography, one controlled vivid vermilion accent. Sophisticated, spacious, emotionally powerful, highly legible, no clutter.
+Composition: left 48 percent is mostly dark negative space with beautifully typeset flush-left text; right half is a breathtaking realistic cinematic triathlon montage seamlessly blended into one moody coastal dawn landscape. A determined lone adult runner viewed from behind is the clearest hero in the right-center, moving toward a thin warm sunrise on a coastal race road. An understated aerodynamic cyclist farther along the winding road and a small open-water swimmer with subtle water ripples nearer the lake edge evoke all three disciplines; keep anatomy, bike geometry, terrain and scale credible. Natural atmospheric perspective, soft haze, subtle film grain, crisp photographic details, avoid pasted cutout appearance. The scene should have real photographic atmosphere and quiet ambition. A very subtle oversized outline of 70.3 may be integrated behind the athlete only if it enhances the restraint.
+Typography and exact copy: near x=10%, y=25% set a small widely tracked uppercase eyebrow "THIS SEMESTER". Beneath, a very large beautiful heavy condensed sans-serif headline in warm ivory, perfectly kerned, on three short lines:
+"EARN YOUR"
+"START"
+"LINE."
+Below headline at about y=65%, put a very thin short vermilion rule, then one prominent easily readable condition line "GPA > 3.5  →  IRONMAN 70.3". Make "GPA > 3.5" particularly clear and vermilion so studying is the explicit gateway. At y=74%, a smaller quiet ivory line "One focused study session closer."
+Desktop constraints: maintain wide safe margins, top 10% calm dark for macOS menu bar and notch, bottom 13% calm dark for Dock; rightmost 12% visually quiet for desktop icons. All essential type must remain inside central 80% width and middle 65% height. Wallpaper must fill the frame edge to edge.
+Avoid: device mockups, frames, app UI, actual menu bars, actual desktop icons, watermarks, sponsor logos, motivational clutter, extra slogans, dense tiny text, neon oversaturation, fake event details. No need for an official logo; render IRONMAN as clean plain typography. Render all requested text exactly, especially the strict greater-than sign in GPA > 3.5. Deliver one finished beautiful wallpaper.
+
