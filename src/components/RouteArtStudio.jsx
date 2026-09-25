@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownToLine, ArrowRight, Check, Heart, ImagePlus, LocateFixed, RotateCcw, Route, Save, Shapes, Star, Trash2, Type, Upload, Zap } from 'lucide-react';
-import { buildArtDesign, readImageRaster, shapeDeviationMeters, templateStrokes, textStrokes, traceRaster } from '../lib/route-art';
-import { requestWalkingRoute } from '../lib/routing-api';
+import { buildArtDesign, readImageRaster, templateStrokes, textStrokes, traceRaster } from '../lib/route-art';
+import { findArtMatches } from '../lib/art-fitting';
+import { readRoutingConfiguration, requestWalkingRoute } from '../lib/routing-api';
 import { StudioMap } from './StudioMap';
 
 function OutlinePreview({ strokes }) {
@@ -53,6 +54,31 @@ export function LocationFields({ center, onChange, label = 'Map center' }) {
   </div>;
 }
 
+function RoutingConnection() {
+  const [status, setStatus] = useState('Checking routing configuration...');
+  const [checking, setChecking] = useState(false);
+  const controllerRef = useRef(null);
+  const check = async () => {
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    setChecking(true);
+    try {
+      const configured = await readRoutingConfiguration(controller.signal);
+      if (controllerRef.current !== controller) return;
+      setStatus(configured ? 'Routing key configured. Live access unverified.' : 'Routing setup needed. No key configured.');
+    } catch {
+      if (controllerRef.current === controller) setStatus('Routing server unavailable.');
+    } finally {
+      clearTimeout(timeout);
+      if (controllerRef.current === controller) setChecking(false);
+    }
+  };
+  useEffect(() => { void check(); return () => { controllerRef.current?.abort(); controllerRef.current = null; }; }, []);
+  return <div className="routingConnection"><span role="status">{status}</span><button type="button" className="subtleAction" disabled={checking} onClick={check}>Check configuration</button></div>;
+}
+
 export function RouteArtStudio({ initialCenter, onUseRoute, onSaveRoute, onExport }) {
   const [mode, setMode] = useState('shape');
   const [shape, setShape] = useState('heart');
@@ -68,6 +94,10 @@ export function RouteArtStudio({ initialCenter, onUseRoute, onSaveRoute, onExpor
   const [designName, setDesignName] = useState('');
   const [status, setStatus] = useState('');
   const [route, setRoute] = useState(null);
+  const [nearby, setNearby] = useState(false);
+  const [matches, setMatches] = useState([]);
+  const [progress, setProgress] = useState(null);
+  const [reviewed, setReviewed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [reading, setReading] = useState(false);
   const [savedDesigns, setSavedDesigns] = useState(() => {
@@ -88,20 +118,21 @@ export function RouteArtStudio({ initialCenter, onUseRoute, onSaveRoute, onExpor
     try { return buildArtDesign(outline.strokes, center, Number(distance), rotation); } catch (error) { return { error: error.message }; }
   }, [outline, center, distance, rotation]);
   const valid = Boolean(design?.coordinates?.length);
-  const deviation = useMemo(() => route && valid ? shapeDeviationMeters(design.coordinates, route.coordinates) : null, [route, design, valid]);
+  const displayedDesign = route?.artDesign || design;
+  const deviation = route?.fitMetrics.pathDeviationM ?? null;
 
   useEffect(() => {
     versionRef.current++;
     requestRef.current?.abort();
-    setRoute(null); setLoading(false); setStatus('');
-  }, [design]);
+    setRoute(null); setMatches([]); setReviewed(false); setProgress(null); setLoading(false); setStatus('');
+  }, [design, nearby]);
   useEffect(() => () => { requestRef.current?.abort(); uploadRef.current++; }, []);
 
   const lines = useMemo(() => [
-    ...(valid ? design.strokes.map((coordinates) => ({ coordinates, color: '#b57524', dashed: !route, opacity: route ? 0.65 : 1, weight: 3 })) : []),
-    ...(valid ? design.connectors.map((coordinates) => ({ coordinates, color: '#738087', dashed: true, weight: 2 })) : []),
+    ...(valid ? displayedDesign.strokes.map((coordinates) => ({ coordinates, color: '#b57524', dashed: !route, opacity: route ? 0.65 : 1, weight: 3 })) : []),
+    ...(valid ? displayedDesign.connectors.map((coordinates) => ({ coordinates, color: '#738087', dashed: true, weight: 2 })) : []),
     ...(route ? [{ coordinates: route.coordinates, color: '#14786c', weight: 5 }] : [])
-  ], [design, valid, route]);
+  ], [displayedDesign, valid, route]);
 
   const changeMode = (next) => { uploadRef.current++; setReading(false); setMode(next); setLoadedStrokes(null); setDesignName(''); };
   const upload = async (file) => {
@@ -120,14 +151,19 @@ export function RouteArtStudio({ initialCenter, onUseRoute, onSaveRoute, onExpor
     const version = versionRef.current;
     const controller = new AbortController();
     requestRef.current = controller;
-    setLoading(true); setStatus('');
+    setLoading(true); setStatus(''); setRoute(null); setMatches([]); setReviewed(false);
     try {
-      const result = await requestWalkingRoute(design.coordinates, controller.signal);
+      const result = await findArtMatches({ strokes: outline.strokes, center, targetKm: Number(distance), rotation, nearby, routeProvider: requestWalkingRoute, signal: controller.signal,
+        onProgress: (next) => { if (version === versionRef.current) setProgress(next); }
+      });
       if (version !== versionRef.current || controller.signal.aborted) return;
-      setRoute({ ...result, id: `art-${crypto.randomUUID()}`, name, targetDistanceKm: Number(distance), routeType: 'art', style: 'art', color: '#14786c', description: 'Walking route fitted to a route-art outline.', label: 'Route art', stops: [], finish: result.coordinates.at(-1), pace: '7:00 min/km', estimatedTime: `${Math.round(result.distanceKm * 7)} min` });
+      const options = result.matches.map(({ route: walking, placement, metrics }) => ({ ...walking, id: `art-${crypto.randomUUID()}`, name, targetDistanceKm: Number(distance), routeType: 'art', style: 'art', color: '#14786c', description: 'Walking route fitted to a route-art outline.', label: 'Route art', stops: [], finish: walking.coordinates.at(-1), pace: '7:00 min/km', estimatedTime: `${Math.round(walking.distanceKm * 7)} min`, artDesign: placement.design, artPlacement: { label: placement.label, center: placement.center, rotation: placement.rotation }, fitMetrics: metrics }));
+      setMatches(options); setRoute(options[0] || null);
+      setStatus(options.length ? `${options.length} walking match${options.length === 1 ? '' : 'es'} from ${result.attempted} attempt${result.attempted === 1 ? '' : 's'}. ${result.failures.length ? `Search incomplete: ${result.failures.at(-1).message}` : 'Ranked by shape, distance error, and repeated segments. Review the selected route before running.'}` : result.failures[0]?.message || 'No walking match found. Try a different placement.');
     } catch (error) { if (error.name !== 'AbortError' && version === versionRef.current) setStatus(error.message); }
     finally { if (version === versionRef.current) setLoading(false); }
   };
+  const cancelFit = () => { versionRef.current++; requestRef.current?.abort(); setLoading(false); setStatus('Search cancelled. No further placements will be requested.'); };
   const persistDesigns = (next) => {
     try { localStorage.setItem('runroute.artDesigns', JSON.stringify(next)); setSavedDesigns(next); return true; }
     catch { setStatus('Device storage is full or unavailable. The design could not be saved.'); return false; }
@@ -145,7 +181,7 @@ export function RouteArtStudio({ initialCenter, onUseRoute, onSaveRoute, onExpor
   return <div className="studioWorkspace">
     <aside className="studioSidebar" aria-label="Route art controls">
       <div className="workspaceTitle"><span className="sectionKicker">CREATE A ROUTE</span><h1>Route art</h1><p>A little less ordinary.</p></div>
-      <div className="controlGroup">
+      <div className="controlGroup sourceControls">
         <span className="controlLabel">Design source</span>
         <div className="studioSegments" role="group" aria-label="Design source">
           {[['shape', Shapes, 'Shape'], ['text', Type, 'Text'], ['image', ImagePlus, 'Image']].map(([id, Icon, label]) => <button key={id} type="button" aria-pressed={mode === id} className={mode === id ? 'selected' : ''} onClick={() => changeMode(id)}><Icon size={16} />{label}</button>)}
@@ -166,22 +202,25 @@ export function RouteArtStudio({ initialCenter, onUseRoute, onSaveRoute, onExpor
       <div className="controlGroup"><div className="labelRow"><label htmlFor="artDistance">Design distance</label><span>km</span></div><input id="artDistance" type="number" min="1" max="60" step="0.5" value={distance} onChange={(e) => setDistance(e.target.value)} /></div>
       <div className="controlGroup"><label className="sliderLabel" htmlFor="rotation">Rotation <output>{rotation}°</output></label><div className="rotationControl"><input id="rotation" type="range" min="-180" max="180" step="5" value={rotation} onChange={(e) => setRotation(Number(e.target.value))} /><button className="iconOnly" type="button" title="Reset rotation" aria-label="Reset rotation" onClick={() => setRotation(0)}><RotateCcw size={16} /></button></div></div>
       <LocationFields center={center} onChange={setCenter} />
-      <div className="sidebarActions"><button className="studioPrimary" type="button" disabled={!valid || loading || reading} onClick={fit}><Route size={17} />{loading ? 'Fitting to paths...' : 'Fit to walking paths'}<ArrowRight size={17} /></button><button className="studioSecondary" type="button" disabled={!valid || reading} onClick={saveDesign}><Save size={16} />Save design</button></div>
+      <div className="controlGroup searchOptions"><label className="checkboxLabel"><input type="checkbox" checked={nearby} onChange={(e) => setNearby(e.target.checked)} />Compare nearby placements</label><span className="privacyNote">{nearby ? 'Up to 3 routing requests. Shifts up to 400 m; turns up to 15 degrees.' : '1 routing request at the current placement.'}</span></div>
+      <div className="sidebarActions"><button className="studioPrimary" type="button" disabled={!valid || loading || reading} onClick={fit}><Route size={17} />{loading ? `Checking ${progress?.attempted || 1} / ${progress?.total || (nearby ? 3 : 1)}...` : 'Fit to walking paths'}<ArrowRight size={17} /></button>{loading && <button className="studioSecondary" type="button" onClick={cancelFit}>Cancel search</button>}<button className="studioSecondary" type="button" disabled={!valid || reading} onClick={saveDesign}><Save size={16} />Save design</button></div>
+      <RoutingConnection />
       {savedDesigns.length > 0 && <details className="savedDesigns"><summary>Saved designs <span>{savedDesigns.length}</span></summary>{savedDesigns.map((saved) => <div key={saved.id}><button type="button" onClick={() => loadDesign(saved)}>{saved.name}<small>{saved.distance} km</small></button><button type="button" className="iconOnly" aria-label={`Delete ${saved.name} design`} title="Delete design" onClick={() => persistDesigns(savedDesigns.filter((d) => d.id !== saved.id))}><Trash2 size={15} /></button></div>)}</details>}
     </aside>
     <section className="studioMain" aria-label="Route art preview">
       <div className="workspaceBar"><div><span className={`statusDot ${route ? 'ready' : ''}`} /><strong>{name}</strong><span className="smallTag">{route ? 'Walking route' : 'Design draft'}</span></div><span className="localBadge">No AI credits</span></div>
-      <StudioMap lines={lines} center={center} onCenterChange={setCenter} fitKey={design} />
+      <StudioMap lines={lines} center={route?.artPlacement.center || center} onCenterChange={setCenter} fitKey={route?.id || design} />
       <div className="mapKey"><span><i className="designLine" />Design outline</span>{route && <span><i className="walkingLine" />Walking route</span>}{valid && design.connectors.length > 0 && <span><i className="connectorLine" />Connecting legs</span>}<span className="mapKeyRight">{route ? 'openrouteservice / walking' : 'Outline only. Not a navigable route.'}</span></div>
       <div className="designSummary">
-        <div className="summaryMetric"><span>Design distance</span><strong>{valid ? design.lengthKm.toFixed(1) : '--'} <small>km</small></strong></div>
+        <div className="summaryMetric"><span>Design distance</span><strong>{valid ? displayedDesign.lengthKm.toFixed(1) : '--'} <small>km</small></strong></div>
         <div className="summaryMetric"><span>Walking distance</span><strong>{route ? route.distanceKm.toFixed(2) : '--'} <small>km</small></strong></div>
         <div className="summaryMetric"><span>Mean path deviation</span><strong>{deviation ?? '--'} <small>m</small></strong></div>
-        <div className="summaryMetric"><span>Connecting legs</span><strong>{valid ? design.connectorKm.toFixed(2) : '--'} <small>km</small></strong></div>
+        <div className="summaryMetric"><span>Connecting legs</span><strong>{valid ? displayedDesign.connectorKm.toFixed(2) : '--'} <small>km</small></strong></div>
       </div>
+      {matches.length > 0 && <section className="fitResults" aria-label="Walking match comparison"><h2>Walking matches</h2><div className="fitOptionList">{matches.map((option, index) => <button type="button" key={option.id} className={option.id === route?.id ? 'selected' : ''} aria-pressed={option.id === route?.id} onClick={() => { setRoute(option); setReviewed(false); }}><span><strong>{option.artPlacement.label}</strong><small>{index === 0 ? 'Best of tested placements' : 'Alternative placement'}</small></span><span>{option.distanceKm.toFixed(2)} km<small>{(option.fitMetrics.distanceErrorRatio * 100).toFixed(1)}% distance error</small></span><span>{option.fitMetrics.outlineDeviationM} m<small>Outline coverage gap</small></span><span>{(option.fitMetrics.repeatedRatio * 100).toFixed(0)}%<small>Repeated segments</small></span></button>)}</div>{route?.fitMetrics.needsReview && <p className="fitWarning">Significant shape distortion, distance error, or repeated paths. This match may not be suitable for the design.</p>}<label className="checkboxLabel"><input type="checkbox" checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} />I reviewed the map, crossings, and local access.</label></section>}
       <div className="studioFeedback" aria-live="polite">
-        {status ? <p role="status">{status}</p> : <p>{loading ? 'Requesting one walking route. The street network may change the shape and distance.' : route ? `Walking route is ${Math.abs(route.distanceKm - Number(distance)).toFixed(2)} km ${route.distanceKm >= Number(distance) ? 'longer' : 'shorter'} than the design. Review access, crossings, and the shape before running.` : 'Street fitting pending. Terrain, access, and distance are not verified.'}</p>}
-        {route && <div className="resultActions"><button className="studioSecondary" type="button" onClick={() => onExport(route)}><ArrowDownToLine size={16} />GPX</button><button className="studioSecondary" type="button" onClick={() => onSaveRoute(route)}><Save size={16} />Save route</button><button className="studioPrimary" type="button" onClick={() => onUseRoute(route)}>Use route<ArrowRight size={16} /></button></div>}
+        {status ? <p role="status">{status}</p> : <p>{loading ? `Checking ${progress?.label || 'walking paths'}. The street network may change the shape and distance.` : 'Street fitting pending. Terrain, access, and distance are not verified.'}</p>}
+        {route && <div className="resultActions"><button className="studioSecondary" type="button" onClick={() => onExport(route)}><ArrowDownToLine size={16} />GPX</button><button className="studioSecondary" type="button" onClick={() => onSaveRoute(route)}><Save size={16} />Save route</button><button className="studioPrimary" type="button" disabled={!reviewed} onClick={() => onUseRoute(route)}>Use route<ArrowRight size={16} /></button></div>}
       </div>
       <div className="studioBottom"><span><Check size={14} />Local outline processing</span><span>Route Art / Beta</span></div>
     </section>

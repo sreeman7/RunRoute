@@ -39,7 +39,7 @@ function createWalkingHandler({ apiKey = process.env.ORS_API_KEY, fetchImpl = fe
     const coordinates = request.body?.coordinates;
     response.set('Cache-Control', 'no-store');
     if (!validCoordinates(coordinates)) return response.status(400).json({ error: 'Provide 2-50 valid longitude/latitude pairs.' });
-    if (!apiKey || apiKey === 'your_ors_key_here') return response.status(503).json({ error: 'Street fitting is not connected yet. Add ORS_API_KEY to the server configuration. No AI key is needed.' });
+    if (!apiKey || apiKey === 'your_ors_key_here') return response.status(503).json({ code: 'ROUTING_NOT_CONFIGURED', error: 'Street fitting is not connected yet. Add ORS_API_KEY to the server configuration. No AI key is needed.' });
     const time = now();
     const today = new Date(time).toISOString().slice(0, 10);
     if (today !== day) { day = today; spent = 0; clients.clear(); }
@@ -52,13 +52,15 @@ function createWalkingHandler({ apiKey = process.env.ORS_API_KEY, fetchImpl = fe
     const client = clients.get(ip) || { count: 0, expires: time + 3600000 };
     if (spent >= limit || client.count >= 12 || active >= 3 || (!clients.has(ip) && clients.size >= 1000)) {
       response.set('Retry-After', '3600');
-      return response.status(429).json({ error: 'The routing request limit has been reached. Keep designing locally and try street fitting later.' });
+      return response.status(429).json({ code: 'ROUTING_LIMIT', error: 'The routing request limit has been reached. Keep designing locally and try street fitting later.' });
     }
     spent++;
     client.count++;
     clients.set(ip, client);
     active++;
     const controller = new AbortController();
+    const onClose = () => { if (!response.writableEnded) controller.abort(); };
+    response.once?.('close', onClose);
     const timeout = setTimeout(() => controller.abort(), 20000);
     try {
       const upstream = await fetchImpl('https://api.openrouteservice.org/v2/directions/foot-walking/geojson', {
@@ -69,7 +71,8 @@ function createWalkingHandler({ apiKey = process.env.ORS_API_KEY, fetchImpl = fe
       });
       if (!upstream.ok) {
         const message = [401, 403].includes(upstream.status) ? 'The walking provider rejected the server credentials. Check the routing configuration.' : upstream.status === 429 ? 'The walking provider is at its request limit. Try again later.' : 'No walking route could fit these points. Move or enlarge the design and try again.';
-        return response.status(upstream.status === 429 ? 429 : 502).json({ error: message });
+        const code = [401, 403].includes(upstream.status) ? 'ROUTING_CREDENTIALS' : upstream.status === 429 ? 'ROUTING_LIMIT' : [400, 404].includes(upstream.status) ? 'NO_WALKING_PATH' : 'PROVIDER_UNAVAILABLE';
+        return response.status(upstream.status === 429 ? 429 : 502).json({ code, error: message });
       }
       const route = normalizeWalkingRoute(await upstream.json());
       if (route.distanceKm > 100) return response.status(422).json({ error: 'The walking detour is over 100 km. Move or simplify the design.' });
@@ -77,9 +80,11 @@ function createWalkingHandler({ apiKey = process.env.ORS_API_KEY, fetchImpl = fe
       cache.set(key, { route, expires: time + 1800000 });
       return response.json({ route, cached: false });
     } catch {
-      return response.status(502).json({ error: controller.signal.aborted ? 'Street fitting timed out. Your design has not changed.' : 'The walking provider could not return a usable route. Try a different placement.' });
+      if (response.destroyed) return;
+      return response.status(502).json({ code: 'PROVIDER_UNAVAILABLE', error: controller.signal.aborted ? 'Street fitting timed out. Your design has not changed.' : 'The walking provider could not return a usable route. Try a different placement.' });
     } finally {
       clearTimeout(timeout);
+      response.off?.('close', onClose);
       active--;
     }
   };

@@ -20,7 +20,9 @@ A map-first running route studio, with route art made from shapes, text, and ima
 
 ## Honest Limits
 
-Route Art is a **beta fitting tool**, not an automatic street-network shape optimizer.
+Route Art is a **beta fitting tool** with a bounded nearby-placement search, not a neighborhood-wide street-network optimizer.
+
+Enable **Compare nearby placements** to test the original placement and two nearby alternatives, shifted by 80-400 m and rotated by 15 degrees. This uses at most three sequential routing requests. Matches are ranked by two-way shape deviation, distance error, and an estimate of repeated segments. The selected outline follows the tested placement, not the original drawing position. A review acknowledgement is required before using a result from the art workspace.
 
 The outline preview is geometry, not a runnable route. Street fitting requests a walking route through at most 48 design points. The result can deviate substantially from the image, repeat streets, or exceed the requested distance. Complex photos and detailed artwork may not produce useful outlines. There is no guarantee that an arbitrary drawing is feasible in a given neighborhood.
 
@@ -70,7 +72,9 @@ For a separately hosted frontend, set `VITE_API_BASE_URL` at build time. The def
 
 - No Gemini requests from the current frontend.
 - The legacy Gemini endpoint is disabled unless `ENABLE_AI=true`.
-- One provider call per Route Art fit; up to three for a normal route search.
+- One provider call per standard Route Art fit; at most three when nearby comparison is selected, and up to three for a normal route search.
+- Search stops on missing/invalid credentials, quota errors, timeouts, or service failures. Only no-path errors advance to another placement; partial successful matches remain available.
+- Search cancellation prevents additional placements and asks the server to abort the active upstream request. A request already sent may still count against the provider quota.
 - Identical successful requests are cached for 30 minutes, up to 50 entries.
 - Default limit: 100 provider requests per UTC day per server process.
 - Additional limits: 12 uncached requests per IP per hour and three concurrent upstream requests.
@@ -131,6 +135,7 @@ src/
     PlannerWorkspace.jsx         Standard route planning
   lib/
     route-art.js                 Contour extraction and map projection
+    art-fitting.js               Bounded placement search and match ranking
     routing-api.js               Walking API client
     run-metrics.js               GPS distance and route progress
 server/
@@ -138,6 +143,7 @@ server/
   walking.js                     Validated, bounded walking provider adapter
 tests/
   route-art.test.js               Geometry and contour regression tests
+  art-fitting.test.js             Ranking, request budgets and cancellation
   walking.test.js                 Provider, validation, budget and cache tests
   run-metrics.test.js             GPS and loop-progress regression tests
 ```
@@ -146,7 +152,7 @@ tests/
 
 Image outlines use [D3 contour polygons](https://d3js.org/d3-contour/contour); waypoint reduction uses Simplify.js. Street fitting uses [Openrouteservice walking directions](https://giscience.github.io/openrouteservice/api-reference/endpoints/directions/), within its [waypoint restrictions](https://openrouteservice.org/restrictions/).
 
-The mean-deviation metric is a distance-weighted average from the fitted walking path to the design segments, including connecting legs. It is not a safety score or AI confidence value. Smaller is closer to the drawing, but visual review is still necessary.
+The mean-deviation metric is a distance-weighted average from the fitted walking path to the design segments, including connecting legs. Outline coverage gap measures the reverse direction, so shortcuts that skip part of the drawing are penalized. Repeated segments count identical coordinate edges (rounded to five decimal places) in either direction; differently segmented versions of the same road can be missed. These are approximate geometry metrics, not safety scores or AI confidence. Smaller deviations are closer to the drawing, but visual review is still necessary.
 
 Future work should prioritize neighborhood-wide shape placement, graph-based shape matching, reliable native recording, and durable abuse protection over adding an AI chat panel.
 

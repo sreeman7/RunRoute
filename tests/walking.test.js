@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { EventEmitter } from 'node:events';
 const require = createRequire(import.meta.url);
 const { createWalkingHandler, validCoordinates, normalizeWalkingRoute } = require('../server/walking.js');
 
@@ -19,6 +20,7 @@ test('missing routing key fails closed without calling a provider', async () => 
   const res = response();
   await handler({ body: { coordinates } }, res);
   assert.equal(res.code, 503);
+  assert.equal(res.body.code, 'ROUTING_NOT_CONFIGURED');
   assert.equal(calls, 0);
 });
 
@@ -68,7 +70,17 @@ test('daily budget prevents additional provider calls but permits cache hits', a
   const res = response();
   await handler({ body: { coordinates: [[-113.52, 53.52], [-113.54, 53.54]] } }, res);
   assert.equal(res.code, 429);
+  assert.equal(res.body.code, 'ROUTING_LIMIT');
   assert.equal(calls, 1);
+});
+
+test('provider error classification tells the search when not to retry', async () => {
+  for (const [status, code] of [[401, 'ROUTING_CREDENTIALS'], [403, 'ROUTING_CREDENTIALS'], [429, 'ROUTING_LIMIT'], [400, 'NO_WALKING_PATH'], [500, 'PROVIDER_UNAVAILABLE']]) {
+    const handler = createWalkingHandler({ apiKey: 'test-key', fetchImpl: async () => ({ ok: false, status }) });
+    const res = response();
+    await handler({ body: { coordinates } }, res);
+    assert.equal(res.body.code, code);
+  }
 });
 
 test('provider failure never returns estimated geometry or raw credentials', async () => {
@@ -78,4 +90,19 @@ test('provider failure never returns estimated geometry or raw credentials', asy
   assert.equal(res.code, 502);
   assert.equal(res.body.route, undefined);
   assert.ok(!JSON.stringify(res.body).includes('test-secret'));
+});
+
+test('a disconnected browser aborts the upstream request and releases its slot', async () => {
+  let aborted = false;
+  const handler = createWalkingHandler({ apiKey: 'test-key', fetchImpl: async (_url, { signal }) => new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => { aborted = true; reject(new Error('aborted')); }, { once: true });
+  }) });
+  const res = Object.assign(new EventEmitter(), response(), { destroyed: false, writableEnded: false });
+  const pending = handler({ ip: 'test', body: { coordinates } }, res);
+  res.destroyed = true;
+  res.emit('close');
+  await pending;
+  assert.equal(aborted, true);
+  assert.equal(res.body, undefined);
+  assert.equal(res.listenerCount('close'), 0);
 });
